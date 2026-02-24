@@ -1,6 +1,8 @@
 {
   "name": "Rust",
   "image": "mcr.microsoft.com/devcontainers/rust:2-1-bullseye",
+  "workspaceMount": "source=${localWorkspaceFolder},target=/workspace,type=bind",
+  "workspaceFolder": "/workspace/rust-actix",
   "postCreateCommand": "git clone https://github.com/richardtowers/dotfiles.git ~/dotfiles && ~/dotfiles/install.sh --patch-bash-for-idea",
   "features": {
     "ghcr.io/tobiaschc/devcontainer-features/starship:1": {}

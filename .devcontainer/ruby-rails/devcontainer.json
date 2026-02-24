@@ -1,6 +1,8 @@
 {
   "name": "Ruby",
   "image": "ghcr.io/rails/devcontainer/images/ruby:3.4.8",
+  "workspaceMount": "source=${localWorkspaceFolder},target=/workspace,type=bind",
+  "workspaceFolder": "/workspace/ruby-rails",
   "postCreateCommand": "git clone https://github.com/richardtowers/dotfiles.git ~/dotfiles && ~/dotfiles/install.sh --patch-bash-for-idea",
   "features": {
     "ghcr.io/tobiaschc/devcontainer-features/starship:1": {},
