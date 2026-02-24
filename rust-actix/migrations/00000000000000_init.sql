@@ -1,0 +1,1 @@
+-- Initial migration: empty schema, ready for feature tables.
