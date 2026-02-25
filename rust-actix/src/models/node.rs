@@ -77,6 +77,25 @@ impl ValidationErrors {
     pub fn all(&self) -> &HashMap<String, Vec<String>> {
         &self.errors
     }
+
+    /// Return error messages prefixed by their capitalized field name,
+    /// e.g. "Title can't be blank". Mirrors Rails' `errors.full_messages`.
+    pub fn full_messages(&self) -> Vec<String> {
+        self.errors
+            .iter()
+            .flat_map(|(field, msgs)| {
+                let capitalized = {
+                    let mut chars = field.chars();
+                    match chars.next() {
+                        Some(c) => c.to_uppercase().to_string() + chars.as_str(),
+                        None => String::new(),
+                    }
+                };
+                msgs.iter()
+                    .map(move |msg| format!("{capitalized} {msg}"))
+            })
+            .collect()
+    }
 }
 
 impl std::fmt::Display for ValidationErrors {

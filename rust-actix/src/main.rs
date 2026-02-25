@@ -45,6 +45,10 @@ async fn main() -> std::io::Result<()> {
             .route("/", web::get().to(routes::root_redirect))
             .route("/up", web::get().to(routes::health_check))
             .route("/admin/content", web::get().to(routes::admin_content_index))
+            .route("/admin/content", web::post().to(routes::admin_content_create))
+            // Static "/new" must be registered before the dynamic "/{id}" pattern,
+            // otherwise Actix would try to match "new" as an ID.
+            .route("/admin/content/new", web::get().to(routes::admin_content_new))
             .route("/admin/content/{id}", web::get().to(routes::admin_content_show))
     })
     .bind((host.as_str(), port))?

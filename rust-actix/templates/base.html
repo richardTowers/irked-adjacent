@@ -14,6 +14,9 @@
     </header>
 
     <main>
+        {% if flash_notice %}
+            <p role="status">{{ flash_notice }}</p>
+        {% endif %}
         {% block content %}{% endblock %}
     </main>
 </body>
