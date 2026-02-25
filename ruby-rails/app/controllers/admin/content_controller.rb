@@ -36,6 +36,12 @@ module Admin
       end
     end
 
+    def destroy
+      @node = Node.find(params[:id])
+      @node.destroy
+      redirect_to admin_content_index_path, notice: "Node was successfully deleted."
+    end
+
     private
 
     def node_params

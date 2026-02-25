@@ -420,4 +420,73 @@ RSpec.describe "Admin::Content", type: :request do
       expect(response).to have_http_status(:not_found)
     end
   end
+
+  describe "DELETE /admin/content/:id" do
+    let!(:node) do
+      Node.create!(title: "Doomed Node", slug: "doomed-node", body: "Goodbye")
+    end
+
+    it "deletes the node and redirects to the listing page" do
+      expect {
+        delete "/admin/content/#{node.id}"
+      }.to change(Node, :count).by(-1)
+
+      expect(response).to redirect_to(admin_content_index_path)
+    end
+
+    it "shows a success flash message after redirect" do
+      delete "/admin/content/#{node.id}"
+
+      follow_redirect!
+
+      expect(response.body).to include("Node was successfully deleted.")
+    end
+
+    it "has the flash message in an element with role='status'" do
+      delete "/admin/content/#{node.id}"
+
+      follow_redirect!
+
+      expect(response.body).to include('role="status"')
+      expect(response.body).to include("Node was successfully deleted.")
+    end
+
+    it "removes the node from the listing" do
+      delete "/admin/content/#{node.id}"
+
+      follow_redirect!
+
+      expect(response.body).not_to include("Doomed Node")
+    end
+
+    it "returns 404 for a non-existent ID" do
+      delete "/admin/content/999999"
+
+      expect(response).to have_http_status(:not_found)
+    end
+
+    it "returns 404 for a non-integer ID" do
+      delete "/admin/content/abc"
+
+      expect(response).to have_http_status(:not_found)
+    end
+  end
+
+  describe "show page delete button" do
+    let!(:node) { Node.create!(title: "Test Node") }
+
+    it "has a delete button rendered as a form with DELETE method" do
+      get "/admin/content/#{node.id}"
+
+      expect(response.body).to include("Delete Node")
+      expect(response.body).to include('name="_method"')
+      expect(response.body).to include('value="delete"')
+    end
+
+    it "includes a confirmation dialog message" do
+      get "/admin/content/#{node.id}"
+
+      expect(response.body).to include("Are you sure you want to delete this node? This action cannot be undone.")
+    end
+  end
 end
