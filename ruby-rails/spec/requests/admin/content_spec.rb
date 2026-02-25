@@ -267,4 +267,157 @@ RSpec.describe "Admin::Content", type: :request do
       end
     end
   end
+
+  describe "GET /admin/content/:id/edit" do
+    let!(:node) do
+      Node.create!(title: "Editable Node", slug: "editable-node", body: "Original body", published: false)
+    end
+
+    it "returns 200 and displays the edit form" do
+      get "/admin/content/#{node.id}/edit"
+
+      expect(response).to have_http_status(:ok)
+      expect(response.body).to include("<h1>Edit Node</h1>")
+    end
+
+    it "pre-fills the form with the node's current values" do
+      get "/admin/content/#{node.id}/edit"
+
+      expect(response.body).to include("Editable Node")
+      expect(response.body).to include("editable-node")
+      expect(response.body).to include("Original body")
+    end
+
+    it "has form fields for title, slug, body, and published" do
+      get "/admin/content/#{node.id}/edit"
+
+      expect(response.body).to include("node[title]")
+      expect(response.body).to include("node[slug]")
+      expect(response.body).to include("node[body]")
+      expect(response.body).to include("node[published]")
+    end
+
+    it "has a submit button labeled 'Update Node'" do
+      get "/admin/content/#{node.id}/edit"
+
+      expect(response.body).to include("Update Node")
+    end
+
+    it "has a cancel link to the node's show page" do
+      get "/admin/content/#{node.id}/edit"
+
+      expect(response.body).to include("Cancel")
+      expect(response.body).to include("href=\"/admin/content/#{node.id}\"")
+    end
+
+    it "returns 404 for a non-existent ID" do
+      get "/admin/content/999999/edit"
+
+      expect(response).to have_http_status(:not_found)
+    end
+  end
+
+  describe "PATCH /admin/content/:id" do
+    let!(:node) do
+      Node.create!(title: "Original Title", slug: "original-title", body: "Original body", published: false)
+    end
+
+    context "with valid params" do
+      it "updates the node and redirects to the show page" do
+        patch "/admin/content/#{node.id}", params: { node: { title: "Updated Title" } }
+
+        expect(response).to redirect_to(admin_content_path(node))
+        expect(node.reload.title).to eq("Updated Title")
+      end
+
+      it "shows a success flash message after redirect" do
+        patch "/admin/content/#{node.id}", params: { node: { title: "Updated Title" } }
+
+        follow_redirect!
+
+        expect(response.body).to include("Node was successfully updated.")
+      end
+
+      it "has the flash message in an element with role='status'" do
+        patch "/admin/content/#{node.id}", params: { node: { title: "Updated Title" } }
+
+        follow_redirect!
+
+        expect(response.body).to include('role="status"')
+        expect(response.body).to include("Node was successfully updated.")
+      end
+    end
+
+    context "with blank title" do
+      it "returns 422 and re-renders the form with errors" do
+        patch "/admin/content/#{node.id}", params: { node: { title: "" } }
+
+        expect(response).to have_http_status(:unprocessable_entity)
+        expect(response.body).to include("Edit Node")
+        expect(response.body).to include("role=\"alert\"")
+      end
+
+      it "preserves the submitted values in the form" do
+        patch "/admin/content/#{node.id}", params: { node: { title: "", body: "Updated body" } }
+
+        expect(response).to have_http_status(:unprocessable_entity)
+        expect(response.body).to include("Updated body")
+      end
+
+      it "marks the title field as aria-invalid" do
+        patch "/admin/content/#{node.id}", params: { node: { title: "" } }
+
+        expect(response.body).to include('aria-invalid="true"')
+        expect(response.body).to include("title-error")
+      end
+    end
+
+    context "slug handling" do
+      it "returns 422 with error when slug duplicates another node" do
+        Node.create!(title: "Other Node", slug: "taken-slug")
+
+        patch "/admin/content/#{node.id}", params: { node: { slug: "taken-slug" } }
+
+        expect(response).to have_http_status(:unprocessable_entity)
+        expect(response.body).to include("slug-error")
+      end
+    end
+
+    context "published flag" do
+      it "sets published_at when transitioning from false to true" do
+        patch "/admin/content/#{node.id}", params: { node: { published: "1" } }
+
+        node.reload
+        expect(node.published).to be true
+        expect(node.published_at).not_to be_nil
+      end
+
+      it "preserves published_at when unchecking published" do
+        node.update!(published: true)
+        original_published_at = node.reload.published_at
+
+        patch "/admin/content/#{node.id}", params: { node: { published: "0" } }
+
+        node.reload
+        expect(node.published).to be false
+        expect(node.published_at).to eq(original_published_at)
+      end
+    end
+
+    context "strong parameters" do
+      it "ignores unpermitted parameters" do
+        patch "/admin/content/#{node.id}", params: { node: { title: "Safe Update", created_at: "2000-01-01" } }
+
+        node.reload
+        expect(node.title).to eq("Safe Update")
+        expect(node.created_at).not_to eq(Time.zone.parse("2000-01-01"))
+      end
+    end
+
+    it "returns 404 for a non-existent ID" do
+      patch "/admin/content/999999", params: { node: { title: "Nope" } }
+
+      expect(response).to have_http_status(:not_found)
+    end
+  end
 end

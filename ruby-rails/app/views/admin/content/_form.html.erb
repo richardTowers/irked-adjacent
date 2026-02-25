@@ -1,0 +1,46 @@
+<% if @node.errors.any? %>
+  <div role="alert">
+    <h2><%= pluralize(@node.errors.count, "error") %> prohibited this node from being saved:</h2>
+    <ul>
+      <% @node.errors.full_messages.each do |message| %>
+        <li><%= message %></li>
+      <% end %>
+    </ul>
+  </div>
+<% end %>
+
+<%= form_with(model: @node, url: url) do |form| %>
+  <div>
+    <%= form.label :title %>
+    <%= form.text_field :title,
+          required: true,
+          **(@node.errors[:title].any? ? { "aria-invalid": "true", "aria-describedby": "title-error" } : {}) %>
+    <% if @node.errors[:title].any? %>
+      <span id="title-error"><%= @node.errors[:title].join(", ") %></span>
+    <% end %>
+  </div>
+
+  <div>
+    <%= form.label :slug %>
+    <%= form.text_field :slug,
+          **(@node.errors[:slug].any? ? { "aria-invalid": "true", "aria-describedby": "slug-error" } : {}) %>
+    <% if @node.errors[:slug].any? %>
+      <span id="slug-error"><%= @node.errors[:slug].join(", ") %></span>
+    <% end %>
+  </div>
+
+  <div>
+    <%= form.label :body %>
+    <%= form.text_area :body %>
+  </div>
+
+  <div>
+    <%= form.check_box :published %>
+    <%= form.label :published %>
+  </div>
+
+  <div>
+    <%= form.submit submit_label %>
+    <%= link_to "Cancel", cancel_path %>
+  </div>
+<% end %>

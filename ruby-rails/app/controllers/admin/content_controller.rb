@@ -22,6 +22,20 @@ module Admin
       end
     end
 
+    def edit
+      @node = Node.find(params[:id])
+    end
+
+    def update
+      @node = Node.find(params[:id])
+
+      if @node.update(node_params)
+        redirect_to admin_content_path(@node), notice: "Node was successfully updated."
+      else
+        render :edit, status: :unprocessable_entity
+      end
+    end
+
     private
 
     def node_params
