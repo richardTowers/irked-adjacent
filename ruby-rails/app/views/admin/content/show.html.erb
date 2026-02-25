@@ -1,0 +1,24 @@
+<h1><%= @node.title %></h1>
+
+<dl>
+  <dt>Slug</dt>
+  <dd><%= @node.slug %></dd>
+
+  <dt>Body</dt>
+  <dd><%= @node.body %></dd>
+
+  <dt>Status</dt>
+  <dd><%= @node.published? ? "Published" : "Draft" %></dd>
+
+  <dt>Published At</dt>
+  <dd><%= @node.published_at ? @node.published_at.strftime("%-d %B %Y %H:%M") : "—" %></dd>
+
+  <dt>Created At</dt>
+  <dd><%= @node.created_at.strftime("%-d %B %Y %H:%M") %></dd>
+
+  <dt>Updated At</dt>
+  <dd><%= @node.updated_at.strftime("%-d %B %Y %H:%M") %></dd>
+</dl>
+
+<%= link_to "Back to content", admin_content_index_path %>
+<%= link_to "Edit", "/admin/content/#{@node.id}/edit" %>

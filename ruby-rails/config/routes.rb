@@ -10,4 +10,10 @@ Rails.application.routes.draw do
   # get "service-worker" => "rails/pwa#service_worker", as: :pwa_service_worker
 
   get "hello", to: "hello#index"
+
+  namespace :admin do
+    resources :content, only: [:index, :show], controller: "content", constraints: { id: /\d+/ }
+  end
+
+  root to: redirect("/admin/content")
 end
