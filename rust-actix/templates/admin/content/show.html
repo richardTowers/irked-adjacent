@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+
+{% block title %}{{ node.title }} — CMS{% endblock %}
+
+{% block content %}
+<h1>{{ node.title }}</h1>
+
+<dl>
+  <dt>Slug</dt>
+  <dd>{{ node.slug }}</dd>
+
+  <dt>Body</dt>
+  <dd>{{ node.body }}</dd>
+
+  <dt>Status</dt>
+  <dd>{% if node.published %}Published{% else %}Draft{% endif %}</dd>
+
+  <dt>Published At</dt>
+  <dd>{{ node.published_at }}</dd>
+
+  <dt>Created At</dt>
+  <dd>{{ node.created_at }}</dd>
+
+  <dt>Updated At</dt>
+  <dd>{{ node.updated_at }}</dd>
+</dl>
+
+<a href="/admin/content">Back to content</a>
+<a href="/admin/content/{{ node.id }}/edit">Edit</a>
+{% endblock %}

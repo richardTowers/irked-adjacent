@@ -42,7 +42,10 @@ async fn main() -> std::io::Result<()> {
                 templates: templates.clone(),
             }))
             .wrap(middleware::Logger::default())
+            .route("/", web::get().to(routes::root_redirect))
             .route("/up", web::get().to(routes::health_check))
+            .route("/admin/content", web::get().to(routes::admin_content_index))
+            .route("/admin/content/{id}", web::get().to(routes::admin_content_show))
     })
     .bind((host.as_str(), port))?
     .run()
