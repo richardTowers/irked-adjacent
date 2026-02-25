@@ -3,6 +3,7 @@ use sqlx::sqlite::SqlitePoolOptions;
 use tera::Tera;
 
 mod config;
+mod models;
 mod routes;
 
 pub struct AppState {
