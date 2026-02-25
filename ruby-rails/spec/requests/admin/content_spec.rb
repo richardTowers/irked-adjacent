@@ -123,4 +123,148 @@ RSpec.describe "Admin::Content", type: :request do
       expect(response).to have_http_status(:not_found)
     end
   end
+
+  describe "GET /admin/content/new" do
+    it "returns 200 and renders the form" do
+      get "/admin/content/new"
+
+      expect(response).to have_http_status(:ok)
+      expect(response.body).to include("<h1>New Node</h1>")
+    end
+
+    it "has form fields for title, slug, body, and published" do
+      get "/admin/content/new"
+
+      expect(response.body).to include("node[title]")
+      expect(response.body).to include("node[slug]")
+      expect(response.body).to include("node[body]")
+      expect(response.body).to include("node[published]")
+    end
+
+    it "has a submit button labeled 'Create Node'" do
+      get "/admin/content/new"
+
+      expect(response.body).to include("Create Node")
+    end
+
+    it "has a cancel link to /admin/content" do
+      get "/admin/content/new"
+
+      expect(response.body).to include("Cancel")
+      expect(response.body).to include("href=\"/admin/content\"")
+    end
+
+    it "marks the title field as required" do
+      get "/admin/content/new"
+
+      expect(response.body).to match(/required="required"[^>]*name="node\[title\]"/)
+    end
+  end
+
+  describe "POST /admin/content" do
+    context "with valid params" do
+      it "creates a node and redirects to the show page" do
+        expect {
+          post "/admin/content", params: { node: { title: "My First Post", body: "Hello world" } }
+        }.to change(Node, :count).by(1)
+
+        node = Node.last
+        expect(response).to redirect_to(admin_content_path(node))
+      end
+
+      it "shows a success flash message after redirect" do
+        post "/admin/content", params: { node: { title: "My First Post" } }
+
+        follow_redirect!
+
+        expect(response.body).to include("Node was successfully created.")
+      end
+
+      it "has the flash message in an element with role='status'" do
+        post "/admin/content", params: { node: { title: "Flash Test" } }
+
+        follow_redirect!
+
+        expect(response.body).to include('role="status"')
+        expect(response.body).to include("Node was successfully created.")
+      end
+    end
+
+    context "with blank title" do
+      it "returns 422 and re-renders the form with errors" do
+        post "/admin/content", params: { node: { title: "", body: "Some body" } }
+
+        expect(response).to have_http_status(:unprocessable_entity)
+        expect(response.body).to include("New Node")
+        expect(response.body).to include("role=\"alert\"")
+      end
+
+      it "preserves previously entered values" do
+        post "/admin/content", params: { node: { title: "", body: "Keep this body" } }
+
+        expect(response).to have_http_status(:unprocessable_entity)
+        expect(response.body).to include("Keep this body")
+      end
+
+      it "marks the title field as aria-invalid" do
+        post "/admin/content", params: { node: { title: "" } }
+
+        expect(response.body).to include('aria-invalid="true"')
+        expect(response.body).to include("title-error")
+      end
+    end
+
+    context "slug handling" do
+      it "auto-generates a slug from the title when slug is blank" do
+        post "/admin/content", params: { node: { title: "My Great Post" } }
+
+        node = Node.last
+        expect(node.slug).to eq("my-great-post")
+      end
+
+      it "uses the provided slug when one is given" do
+        post "/admin/content", params: { node: { title: "My Great Post", slug: "custom-slug" } }
+
+        node = Node.last
+        expect(node.slug).to eq("custom-slug")
+      end
+
+      it "returns 422 with error when slug is a duplicate" do
+        Node.create!(title: "Existing", slug: "taken-slug")
+
+        post "/admin/content", params: { node: { title: "New Post", slug: "taken-slug" } }
+
+        expect(response).to have_http_status(:unprocessable_entity)
+        expect(response.body).to include("slug-error")
+      end
+    end
+
+    context "published flag" do
+      it "sets published to true and records published_at when checked" do
+        post "/admin/content", params: { node: { title: "Published Post", published: "1" } }
+
+        node = Node.last
+        expect(node.published).to be true
+        expect(node.published_at).not_to be_nil
+      end
+
+      it "defaults to draft when published is not checked" do
+        post "/admin/content", params: { node: { title: "Draft Post" } }
+
+        node = Node.last
+        expect(node.published).to be false
+        expect(node.published_at).to be_nil
+      end
+    end
+
+    context "strong parameters" do
+      it "ignores unpermitted parameters" do
+        post "/admin/content", params: { node: { title: "Safe Post", created_at: "2000-01-01" } }
+
+        node = Node.last
+        expect(node.title).to eq("Safe Post")
+        expect(node.created_at).not_to eq(Time.zone.parse("2000-01-01"))
+      end
+    end
+  end
 end

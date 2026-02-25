@@ -12,7 +12,7 @@ Rails.application.routes.draw do
   get "hello", to: "hello#index"
 
   namespace :admin do
-    resources :content, only: [:index, :show], controller: "content", constraints: { id: /\d+/ }
+    resources :content, only: [:index, :show, :new, :create], controller: "content", constraints: { id: /\d+/ }
   end
 
   root to: redirect("/admin/content")

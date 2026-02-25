@@ -33,6 +33,9 @@
     </header>
 
     <main>
+      <% if flash[:notice] %>
+        <p role="status"><%= flash[:notice] %></p>
+      <% end %>
       <%= yield %>
     </main>
   </body>
