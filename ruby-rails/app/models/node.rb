@@ -10,7 +10,7 @@ class Node < ApplicationRecord
 
   validate :slug_immutability
 
-  def self.create_with_version(title:, slug: nil, body: nil)
+  def self.create_with_version(title:, slug: nil, body: nil, branch: nil)
     node = nil
     version = nil
 
@@ -19,10 +19,10 @@ class Node < ApplicationRecord
       node.title_for_slug = title if slug.blank?
       node.save!
 
-      main_branch = Branch.find_by!(name: "main")
+      target_branch = branch || Branch.find_by!(name: "main")
       version = Version.create!(
         node: node,
-        branch: main_branch,
+        branch: target_branch,
         title: title,
         body: body
       )

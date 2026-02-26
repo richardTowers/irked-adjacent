@@ -1,0 +1,28 @@
+<h1>Branches</h1>
+
+<%= link_to "New Branch", new_admin_branch_path %>
+
+<table>
+  <thead>
+    <tr>
+      <th scope="col">Name</th>
+      <th scope="col">Protected</th>
+      <th scope="col">Created</th>
+      <th scope="col">Actions</th>
+    </tr>
+  </thead>
+  <tbody>
+    <% @branches.each do |branch| %>
+      <tr>
+        <td><%= branch.name %></td>
+        <td><%= branch.protected? ? "Yes" : "" %></td>
+        <td><%= branch.created_at.strftime("%-d %B %Y %H:%M") %></td>
+        <td>
+          <% unless branch.protected? %>
+            <%= button_to "Delete", admin_branch_path(branch), method: :delete, data: { confirm: "Are you sure you want to delete this branch? All versions on this branch will be permanently deleted." } %>
+          <% end %>
+        </td>
+      </tr>
+    <% end %>
+  </tbody>
+</table>

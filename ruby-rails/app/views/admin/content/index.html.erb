@@ -17,12 +17,24 @@
     </thead>
     <tbody>
       <% @nodes.each do |node| %>
-        <% current_version = Version.current_for(node, @main_branch) %>
+        <% branch_version = Version.current_for(node, current_branch) %>
+        <% on_branch = !branch_version.nil? %>
+        <% unless on_branch %>
+          <% branch_version = Version.current_for(node, @main_branch) if current_branch != @main_branch %>
+        <% end %>
         <% is_published = node.versions.committed.where(branch: @published_branch).exists? %>
         <tr>
-          <td><%= link_to current_version&.title, admin_content_path(node) %></td>
+          <td><%= link_to(branch_version&.title || "(no title)", admin_content_path(node)) %></td>
           <td><%= node.slug %></td>
-          <td><%= current_version&.committed_at ? "Committed" : "Draft" %></td>
+          <td>
+            <% if !on_branch %>
+              Not on branch
+            <% elsif branch_version&.committed_at %>
+              Committed
+            <% else %>
+              Draft
+            <% end %>
+          </td>
           <td><%= is_published ? "Yes" : "No" %></td>
           <td><%= node.updated_at.strftime("%-d %B %Y %H:%M") %></td>
         </tr>

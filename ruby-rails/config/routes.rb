@@ -18,6 +18,8 @@ Rails.application.routes.draw do
         post :publish
       end
     end
+    resources :branches, only: [:index, :new, :create, :destroy], constraints: { id: /\d+/ }
+    post "switch-branch", to: "branches#switch", as: :switch_branch
   end
 
   root to: redirect("/admin/content")

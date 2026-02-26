@@ -1,5 +1,15 @@
 <h1><%= @current_version&.title %></h1>
 
+<% is_published_branch = current_branch.name == "published" %>
+
+<% if is_published_branch %>
+  <p role="status">The published branch is read-only. Switch to another branch to edit.</p>
+<% end %>
+
+<% if @fallback %>
+  <p role="status">This node has not been modified on branch <%= current_branch.name %>. Editing will create a version on this branch.</p>
+<% end %>
+
 <dl>
   <dt>Slug</dt>
   <dd><%= @node.slug %></dd>
@@ -30,37 +40,40 @@
   <% end %>
 </dl>
 
-<% if @current_version && @current_version.committed_at.nil? %>
-  <form action="<%= commit_admin_content_path(@node) %>" method="post">
-    <input type="hidden" name="authenticity_token" value="<%= form_authenticity_token %>">
-    <div>
-      <label for="commit_message">Commit message</label>
-      <input type="text" name="commit[commit_message]" id="commit_message">
-    </div>
-    <div>
-      <input type="submit" value="Commit">
-    </div>
-  </form>
-<% end %>
+<% unless is_published_branch %>
+  <% if @current_version && @current_version.committed_at.nil? %>
+    <form action="<%= commit_admin_content_path(@node) %>" method="post">
+      <input type="hidden" name="authenticity_token" value="<%= form_authenticity_token %>">
+      <div>
+        <label for="commit_message">Commit message</label>
+        <input type="text" name="commit[commit_message]" id="commit_message">
+      </div>
+      <div>
+        <input type="submit" value="Commit">
+      </div>
+    </form>
+  <% end %>
 
-<% if @latest_committed %>
-  <% publish_up_to_date = @latest_published && @latest_published.source_version_id == @latest_committed.id %>
-  <% unless publish_up_to_date %>
+  <% if @latest_committed %>
+    <% publish_up_to_date = @latest_published && @latest_published.source_version_id == @latest_committed.id %>
+    <% unless publish_up_to_date %>
+      <% if @has_uncommitted %>
+        <p>Commit your draft before publishing</p>
+      <% else %>
+        <form action="<%= publish_admin_content_path(@node) %>" method="post">
+          <input type="hidden" name="authenticity_token" value="<%= form_authenticity_token %>">
+          <button type="submit">Publish</button>
+        </form>
+      <% end %>
+    <% end %>
+  <% else %>
     <% if @has_uncommitted %>
       <p>Commit your draft before publishing</p>
-    <% else %>
-      <form action="<%= publish_admin_content_path(@node) %>" method="post">
-        <input type="hidden" name="authenticity_token" value="<%= form_authenticity_token %>">
-        <button type="submit">Publish</button>
-      </form>
     <% end %>
   <% end %>
-<% else %>
-  <% if @has_uncommitted %>
-    <p>Commit your draft before publishing</p>
-  <% end %>
+
+  <%= link_to "Edit Node", "/admin/content/#{@node.id}/edit" %>
 <% end %>
 
-<%= link_to "Edit Node", "/admin/content/#{@node.id}/edit" %>
 <%= link_to "Back to Nodes", admin_content_index_path %>
 <%= button_to "Delete Node", admin_content_path(@node), method: :delete, data: { confirm: "Are you sure you want to delete this node? This action cannot be undone." } %>

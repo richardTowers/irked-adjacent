@@ -8,12 +8,19 @@ module Admin
 
     def show
       @node = Node.find(params[:id])
-      @main_branch = Branch.find_by!(name: "main")
       @published_branch = Branch.find_by!(name: "published")
-      @current_version = Version.current_for(@node, @main_branch)
-      @latest_committed = @node.versions.committed.where(branch: @main_branch).order(committed_at: :desc).first
+      @main_branch = Branch.find_by!(name: "main")
+
+      @current_version = Version.current_for(@node, current_branch)
+      @fallback = false
+      if @current_version.nil? && current_branch != @main_branch
+        @current_version = Version.current_for(@node, @main_branch)
+        @fallback = true
+      end
+
+      @latest_committed = @node.versions.committed.where(branch: current_branch).order(committed_at: :desc).first
       @latest_published = @node.versions.committed.where(branch: @published_branch).order(committed_at: :desc).first
-      @has_uncommitted = @node.versions.uncommitted.where(branch: @main_branch).exists?
+      @has_uncommitted = @node.versions.uncommitted.where(branch: current_branch).exists?
     end
 
     def new
@@ -26,7 +33,8 @@ module Admin
         @node, @version = Node.create_with_version(
           title: create_params[:title],
           slug: create_params[:slug],
-          body: create_params[:body]
+          body: create_params[:body],
+          branch: current_branch
         )
         redirect_to admin_content_path(@node), notice: "Node was successfully created."
       rescue ActiveRecord::RecordInvalid => e
@@ -41,7 +49,12 @@ module Admin
     def edit
       @node = Node.find(params[:id])
       @main_branch = Branch.find_by!(name: "main")
-      @current_version = Version.current_for(@node, @main_branch)
+
+      @current_version = Version.current_for(@node, current_branch)
+      if @current_version.nil? && current_branch != @main_branch
+        @current_version = Version.current_for(@node, @main_branch)
+      end
+
       @version = Version.new(title: @current_version&.title, body: @current_version&.body)
     end
 
@@ -49,21 +62,37 @@ module Admin
       @node = Node.find(params[:id])
       @main_branch = Branch.find_by!(name: "main")
 
-      @version = Version.uncommitted.find_by(node: @node, branch: @main_branch)
+      @version = Version.uncommitted.find_by(node: @node, branch: current_branch)
 
       if @version
         @version.assign_attributes(update_params)
       else
         latest_committed = Version.committed
-                                   .where(node: @node, branch: @main_branch)
+                                   .where(node: @node, branch: current_branch)
                                    .order(committed_at: :desc)
                                    .first
-        @version = Version.new(
-          node: @node,
-          branch: @main_branch,
-          parent_version: latest_committed,
-          **update_params
-        )
+
+        if latest_committed
+          # Existing committed version on this branch — create new draft with parent
+          @version = Version.new(
+            node: @node,
+            branch: current_branch,
+            parent_version: latest_committed,
+            **update_params
+          )
+        else
+          # No version on this branch — fork from main
+          source = Version.committed
+                          .where(node: @node, branch: @main_branch)
+                          .order(committed_at: :desc)
+                          .first
+          @version = Version.new(
+            node: @node,
+            branch: current_branch,
+            source_version: source,
+            **update_params
+          )
+        end
       end
 
       if @version.save
@@ -75,9 +104,8 @@ module Admin
 
     def commit
       @node = Node.find(params[:id])
-      @main_branch = Branch.find_by!(name: "main")
 
-      @current_version = Version.uncommitted.find_by(node: @node, branch: @main_branch)
+      @current_version = Version.uncommitted.find_by(node: @node, branch: current_branch)
 
       unless @current_version
         redirect_to admin_content_path(@node), alert: "No uncommitted changes to commit."
@@ -97,9 +125,8 @@ module Admin
 
     def publish
       @node = Node.find(params[:id])
-      @main_branch = Branch.find_by!(name: "main")
 
-      latest_committed = @node.versions.committed.where(branch: @main_branch).order(committed_at: :desc).first
+      latest_committed = @node.versions.committed.where(branch: current_branch).order(committed_at: :desc).first
 
       unless latest_committed
         redirect_to admin_content_path(@node), alert: "No committed version to publish."

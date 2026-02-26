@@ -1,0 +1,29 @@
+<h1>New Branch</h1>
+
+<% if @branch.errors.any? %>
+  <div role="alert">
+    <h2><%= pluralize(@branch.errors.count, "error") %> prohibited this branch from being saved:</h2>
+    <ul>
+      <% @branch.errors.full_messages.each do |message| %>
+        <li><%= message %></li>
+      <% end %>
+    </ul>
+  </div>
+<% end %>
+
+<%= form_with(model: @branch, url: admin_branches_path) do |form| %>
+  <div>
+    <%= form.label :name %>
+    <%= form.text_field :name,
+          required: true,
+          **(@branch.errors[:name].any? ? { "aria-invalid": "true", "aria-describedby": "name-error" } : {}) %>
+    <% if @branch.errors[:name].any? %>
+      <span id="name-error"><%= @branch.errors[:name].join(", ") %></span>
+    <% end %>
+  </div>
+
+  <div>
+    <%= form.submit "Create Branch" %>
+    <%= link_to "Cancel", admin_branches_path %>
+  </div>
+<% end %>

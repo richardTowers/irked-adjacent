@@ -29,7 +29,19 @@
     <header>
       <nav>
         <%= link_to "Content", "/admin/content" %>
+        <%= link_to "Branches", admin_branches_path %>
       </nav>
+      <% if defined?(current_branch) %>
+        <form action="<%= admin_switch_branch_path %>" method="post" style="display:inline">
+          <input type="hidden" name="authenticity_token" value="<%= form_authenticity_token %>">
+          <label for="branch_selector">Branch:</label>
+          <select name="branch_id" id="branch_selector" onchange="this.form.submit()">
+            <% Branch.order(Arel.sql("CASE WHEN name = 'main' THEN 0 ELSE 1 END, name ASC")).each do |branch| %>
+              <option value="<%= branch.id %>" <%= "selected" if branch.id == current_branch.id %> <%= "aria-current=\"true\"" if branch.id == current_branch.id %>><%= branch.name %></option>
+            <% end %>
+          </select>
+        </form>
+      <% end %>
     </header>
 
     <main>

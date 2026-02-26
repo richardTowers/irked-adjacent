@@ -806,4 +806,202 @@ RSpec.describe "Admin::Content", type: :request do
       expect(response.body).to include("Are you sure you want to delete this node? This action cannot be undone.")
     end
   end
+
+  describe "branch-aware content operations" do
+    let!(:feature_branch) { Branch.create!(name: "feature-1") }
+
+    def switch_to(branch)
+      post "/admin/switch-branch", params: { branch_id: branch.id }
+    end
+
+    describe "index page on a non-main branch" do
+      it "shows title from the selected branch version" do
+        node, version = create_node(title: "Main Title")
+        version.commit!("Done")
+
+        # Create a version on the feature branch
+        Version.create!(
+          node: node, branch: feature_branch, title: "Feature Title",
+          source_version: version
+        )
+
+        switch_to(feature_branch)
+        get "/admin/content"
+
+        expect(response.body).to include("Feature Title")
+      end
+
+      it "falls back to main title when no version on selected branch" do
+        create_node(title: "Main Only")
+
+        switch_to(feature_branch)
+        get "/admin/content"
+
+        expect(response.body).to include("Main Only")
+      end
+
+      it "shows 'Not on branch' when node has no version on selected branch" do
+        create_node(title: "Main Only")
+
+        switch_to(feature_branch)
+        get "/admin/content"
+
+        expect(response.body).to include("Not on branch")
+      end
+    end
+
+    describe "show page on a non-main branch" do
+      it "shows content from the selected branch" do
+        node, version = create_node(title: "Main Title")
+        version.commit!("Done")
+        Version.create!(node: node, branch: feature_branch, title: "Feature Title", source_version: version)
+
+        switch_to(feature_branch)
+        get "/admin/content/#{node.id}"
+
+        expect(response.body).to include("Feature Title")
+      end
+
+      it "falls back to main and shows notice when no version on selected branch" do
+        node, _version = create_node(title: "Main Content")
+
+        switch_to(feature_branch)
+        get "/admin/content/#{node.id}"
+
+        expect(response.body).to include("Main Content")
+        expect(response.body).to include("This node has not been modified on branch feature-1")
+      end
+    end
+
+    describe "edit/save on a non-main branch" do
+      it "creates a version on the selected branch with source_version from main" do
+        node, version = create_node(title: "Original")
+        version.commit!("Initial")
+
+        switch_to(feature_branch)
+
+        expect {
+          patch "/admin/content/#{node.id}", params: { node: { title: "Branched Edit", body: "New content" } }
+        }.to change(Version, :count).by(1)
+
+        new_version = Version.current_for(node, feature_branch)
+        expect(new_version.title).to eq("Branched Edit")
+        expect(new_version.source_version).to eq(version)
+        expect(new_version.branch).to eq(feature_branch)
+      end
+    end
+
+    describe "commit on a non-main branch" do
+      it "commits the version on the selected branch" do
+        node, _version = create_node(title: "Main Draft")
+
+        switch_to(feature_branch)
+        # Create a version on the feature branch
+        patch "/admin/content/#{node.id}", params: { node: { title: "Feature Draft" } }
+
+        post "/admin/content/#{node.id}/commit", params: { commit: { commit_message: "Feature commit" } }
+
+        follow_redirect!
+        expect(response.body).to include("Version was successfully committed.")
+
+        feature_version = Version.committed.where(node: node, branch: feature_branch).last
+        expect(feature_version.commit_message).to eq("Feature commit")
+      end
+    end
+
+    describe "publish from a non-main branch" do
+      it "publishes with the correct branch name in commit message" do
+        node, _version = create_node(title: "Main Draft")
+
+        switch_to(feature_branch)
+        patch "/admin/content/#{node.id}", params: { node: { title: "Feature Content" } }
+        post "/admin/content/#{node.id}/commit", params: { commit: { commit_message: "Ready" } }
+
+        post "/admin/content/#{node.id}/publish"
+
+        follow_redirect!
+        expect(response.body).to include("Node was successfully published.")
+
+        published_branch = Branch.find_by!(name: "published")
+        published_version = Version.where(node: node, branch: published_branch).last
+        expect(published_version.commit_message).to eq("Publish from feature-1")
+      end
+    end
+
+    describe "creating nodes on a non-main branch" do
+      it "creates the initial version on the selected branch" do
+        switch_to(feature_branch)
+
+        post "/admin/content", params: { node: { title: "Branch Node" } }
+
+        node = Node.last
+        version = Version.last
+        expect(version.branch).to eq(feature_branch)
+        expect(version.title).to eq("Branch Node")
+      end
+    end
+  end
+
+  describe "published branch read-only mode" do
+    let(:published_branch) { Branch.find_by!(name: "published") }
+
+    def switch_to_published
+      post "/admin/switch-branch", params: { branch_id: published_branch.id }
+    end
+
+    it "shows read-only notice on the show page" do
+      node, version = create_node(title: "Published Node")
+      version.commit!("Done")
+      Version.publish!(version)
+
+      switch_to_published
+      get "/admin/content/#{node.id}"
+
+      expect(response.body).to include("The published branch is read-only. Switch to another branch to edit.")
+    end
+
+    it "hides the Edit Node link" do
+      node, version = create_node(title: "Published Node")
+      version.commit!("Done")
+      Version.publish!(version)
+
+      switch_to_published
+      get "/admin/content/#{node.id}"
+
+      expect(response.body).not_to include("Edit Node")
+    end
+
+    it "hides the commit form" do
+      node, version = create_node(title: "Published Node")
+      version.commit!("Done")
+      Version.publish!(version)
+
+      switch_to_published
+      get "/admin/content/#{node.id}"
+
+      expect(response.body).not_to include('value="Commit"')
+    end
+
+    it "hides the publish button" do
+      node, version = create_node(title: "Published Node")
+      version.commit!("Done")
+      Version.publish!(version)
+
+      switch_to_published
+      get "/admin/content/#{node.id}"
+
+      expect(response.body).not_to include(">Publish<")
+    end
+
+    it "shows published content on the index page" do
+      node, version = create_node(title: "Pub Title")
+      version.commit!("Done")
+      Version.publish!(version)
+
+      switch_to_published
+      get "/admin/content"
+
+      expect(response.body).to include("Pub Title")
+    end
+  end
 end
