@@ -45,6 +45,15 @@ RSpec.configure do |config|
   # instead of true.
   config.use_transactional_fixtures = true
 
+  # Seed required branch records before the test suite runs.
+  config.before(:suite) do
+    ActiveRecord::Base.connection.execute(<<-SQL)
+      INSERT OR IGNORE INTO branches (name, created_at, updated_at)
+      VALUES ('main', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+             ('published', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+    SQL
+  end
+
   config.include ActiveSupport::Testing::TimeHelpers
 
   # You can uncomment this line to turn off ActiveRecord support entirely.
