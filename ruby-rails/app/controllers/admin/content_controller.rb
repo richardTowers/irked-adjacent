@@ -145,6 +145,21 @@ module Admin
       redirect_to admin_content_path(@node), notice: "Node was successfully published."
     end
 
+    def history
+      @node = Node.find(params[:id])
+      @current_version = Version.current_for(@node, current_branch)
+
+      uncommitted = @node.versions.uncommitted.where(branch: current_branch).first
+      committed = @node.versions.committed
+                       .where(branch: current_branch)
+                       .includes(:branch, :source_version)
+                       .order(committed_at: :desc)
+
+      @versions = []
+      @versions << uncommitted if uncommitted
+      @versions.concat(committed)
+    end
+
     def destroy
       @node = Node.find(params[:id])
       @node.destroy

@@ -1,0 +1,43 @@
+<h1><%= @version.committed_at ? @version.commit_message : "Uncommitted draft" %></h1>
+
+<dl>
+  <dt>Title</dt>
+  <dd><%= @version.title %></dd>
+
+  <dt>Body</dt>
+  <dd><%= @version.body %></dd>
+
+  <dt>Committed At</dt>
+  <dd><%= @version.committed_at ? @version.committed_at.strftime("%-d %B %Y %H:%M") : "Not yet committed" %></dd>
+
+  <dt>Commit Message</dt>
+  <dd><%= @version.commit_message.present? ? @version.commit_message : "None" %></dd>
+
+  <dt>Parent Version</dt>
+  <dd>
+    <% if @version.parent_version_id %>
+      <%= link_to "View parent version", admin_content_version_path(@node, @version.parent_version) %>
+    <% else %>
+      None (initial version)
+    <% end %>
+  </dd>
+
+  <dt>Source Version</dt>
+  <dd>
+    <% if @version.source_version_id %>
+      <%= link_to "View source version (#{@version.source_version.branch.name})", admin_content_version_path(@node, @version.source_version) %>
+    <% else %>
+      None
+    <% end %>
+  </dd>
+</dl>
+
+<% if @version.committed_at.present? && current_branch.name != "published" %>
+  <form action="<%= revert_admin_content_version_path(@node, @version) %>" method="post">
+    <input type="hidden" name="authenticity_token" value="<%= form_authenticity_token %>">
+    <button type="submit">Revert to This Version</button>
+  </form>
+<% end %>
+
+<%= link_to "Back to History", history_admin_content_path(@node) %>
+<%= link_to "Back to Node", admin_content_path(@node) %>

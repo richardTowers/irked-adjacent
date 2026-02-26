@@ -1,0 +1,46 @@
+<h1>History for <%= @current_version&.title %></h1>
+
+<% if @versions.empty? %>
+  <p>No version history.</p>
+<% else %>
+  <table>
+    <thead>
+      <tr>
+        <th scope="col">Commit Message</th>
+        <th scope="col">Committed At</th>
+        <th scope="col">Source</th>
+        <th scope="col">Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+      <% @versions.each do |version| %>
+        <tr>
+          <td>
+            <% if version.committed_at.nil? %>
+              <strong>Uncommitted draft</strong>
+            <% else %>
+              <%= version.commit_message %>
+            <% end %>
+          </td>
+          <td>
+            <% if version.committed_at.nil? %>
+              Not yet committed
+            <% else %>
+              <%= version.committed_at.strftime("%-d %B %Y %H:%M") %>
+            <% end %>
+          </td>
+          <td>
+            <% if version.source_version_id.present? %>
+              Merged from <%= version.source_version&.branch&.name %>
+            <% end %>
+          </td>
+          <td>
+            <%= link_to "View", admin_content_version_path(@node, version), aria: { label: version.committed_at ? "View #{version.commit_message}" : "View uncommitted draft" } %>
+          </td>
+        </tr>
+      <% end %>
+    </tbody>
+  </table>
+<% end %>
+
+<%= link_to "Back to Node", admin_content_path(@node) %>

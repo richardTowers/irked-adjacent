@@ -16,6 +16,12 @@ Rails.application.routes.draw do
       member do
         post :commit
         post :publish
+        get :history
+      end
+      resources :versions, only: [:show], controller: "versions", constraints: { id: /\d+/ } do
+        member do
+          post :revert
+        end
       end
     end
     resources :branches, only: [:index, :new, :create, :destroy], constraints: { id: /\d+/ }
