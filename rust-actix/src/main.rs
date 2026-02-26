@@ -50,6 +50,9 @@ async fn main() -> std::io::Result<()> {
             // otherwise Actix would try to match "new" as an ID.
             .route("/admin/content/new", web::get().to(routes::admin_content_new))
             .route("/admin/content/{id}", web::get().to(routes::admin_content_show))
+            .route("/admin/content/{id}", web::delete().to(routes::admin_content_destroy))
+            // POST with _method override — lets HTML forms tunnel DELETE requests
+            .route("/admin/content/{id}", web::post().to(routes::admin_content_method_override))
     })
     .bind((host.as_str(), port))?
     .run()

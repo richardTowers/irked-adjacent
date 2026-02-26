@@ -24,6 +24,15 @@ pub struct NodeFormData {
     pub published: Option<String>,
 }
 
+/// Form data for method override. HTML forms only support GET and POST, so
+/// Rails uses a hidden `_method` field to tunnel DELETE/PATCH/PUT requests
+/// through POST. This struct captures that field.
+#[derive(serde::Deserialize)]
+pub struct MethodOverrideForm {
+    #[serde(rename = "_method")]
+    pub method: Option<String>,
+}
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -322,5 +331,70 @@ pub async fn admin_content_create(
                 StatusCode::UNPROCESSABLE_ENTITY,
             )
         }
+    }
+}
+
+/// DELETE /admin/content/{id} — Delete a node.
+///
+/// Equivalent to Rails' Admin::ContentController#destroy.
+/// Deletes the node and redirects to the listing page with a flash notice.
+/// Returns 404 for non-existent or non-integer IDs.
+pub async fn admin_content_destroy(
+    data: web::Data<AppState>,
+    path: web::Path<String>,
+) -> HttpResponse {
+    let id: i64 = match path.into_inner().parse() {
+        Ok(id) => id,
+        Err(_) => {
+            return HttpResponse::NotFound()
+                .content_type("text/plain")
+                .body("Not Found");
+        }
+    };
+
+    match Node::delete(&data.db, id).await {
+        Ok(true) => {
+            // Node was deleted — redirect to listing with a flash notice.
+            // Uses 303 See Other so the browser issues a GET after the DELETE.
+            HttpResponse::SeeOther()
+                .cookie(
+                    Cookie::build("flash_notice", "Node was successfully deleted.")
+                        .path("/")
+                        .http_only(true)
+                        .finish(),
+                )
+                .insert_header(("Location", "/admin/content"))
+                .finish()
+        }
+        Ok(false) => {
+            // No row matched — the ID doesn't exist.
+            HttpResponse::NotFound()
+                .content_type("text/plain")
+                .body("Not Found")
+        }
+        Err(_) => HttpResponse::InternalServerError()
+            .content_type("text/plain")
+            .body("Database error"),
+    }
+}
+
+/// POST /admin/content/{id} — Method override handler.
+///
+/// HTML forms only support GET and POST, so Rails uses a hidden `_method` field
+/// to tunnel DELETE (and PATCH/PUT) requests through POST. This handler reads
+/// that field and delegates to the appropriate action.
+///
+/// This is the Actix equivalent of Rails' `Rack::MethodOverride` middleware,
+/// scoped to this specific route rather than applied globally.
+pub async fn admin_content_method_override(
+    data: web::Data<AppState>,
+    path: web::Path<String>,
+    form: web::Form<MethodOverrideForm>,
+) -> HttpResponse {
+    match form.method.as_deref() {
+        Some("delete") => admin_content_destroy(data, path).await,
+        _ => HttpResponse::NotFound()
+            .content_type("text/plain")
+            .body("Not Found"),
     }
 }

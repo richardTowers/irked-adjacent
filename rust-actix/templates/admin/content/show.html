@@ -27,4 +27,8 @@
 
 <a href="/admin/content">Back to content</a>
 <a href="/admin/content/{{ node.id }}/edit">Edit</a>
+<form method="post" action="/admin/content/{{ node.id }}" onsubmit="return confirm('Are you sure you want to delete this node? This action cannot be undone.');">
+  <input type="hidden" name="_method" value="delete">
+  <button type="submit">Delete Node</button>
+</form>
 {% endblock %}
