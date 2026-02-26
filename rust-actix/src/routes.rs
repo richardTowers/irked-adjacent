@@ -197,12 +197,25 @@ pub async fn admin_content_index(
         }
     };
 
+    let published_branch = match Branch::find_by_name(&data.db, "published").await {
+        Ok(Some(b)) => b,
+        _ => {
+            return HttpResponse::InternalServerError()
+                .content_type("text/plain")
+                .body("Published branch not found");
+        }
+    };
+
     // Build view data with current version info for each node.
     let mut node_views = Vec::new();
     for node in &nodes {
         let current_version = Version::current_for(&data.db, node.id, main_branch.id)
             .await
             .unwrap_or(None);
+
+        let is_published = Version::has_committed(&data.db, node.id, published_branch.id)
+            .await
+            .unwrap_or(false);
 
         let title = current_version
             .as_ref()
@@ -219,6 +232,7 @@ pub async fn admin_content_index(
             "title": title,
             "slug": &node.slug,
             "status": status,
+            "is_published": if is_published { "Yes" } else { "No" },
             "updated_at": format_datetime(node.updated_at),
         }));
     }
@@ -272,9 +286,40 @@ pub async fn admin_content_show(
         }
     };
 
+    let published_branch = match Branch::find_by_name(&data.db, "published").await {
+        Ok(Some(b)) => b,
+        _ => {
+            return HttpResponse::InternalServerError()
+                .content_type("text/plain")
+                .body("Published branch not found");
+        }
+    };
+
     let current_version = Version::current_for(&data.db, node.id, main_branch.id)
         .await
         .unwrap_or(None);
+
+    let latest_committed = Version::latest_committed(&data.db, node.id, main_branch.id)
+        .await
+        .unwrap_or(None);
+
+    let latest_published =
+        Version::latest_committed(&data.db, node.id, published_branch.id)
+            .await
+            .unwrap_or(None);
+
+    let has_uncommitted = Version::find_uncommitted(&data.db, node.id, main_branch.id)
+        .await
+        .unwrap_or(None)
+        .is_some();
+
+    // Determine whether the published version is up to date with the latest commit
+    let publish_up_to_date = match (&latest_committed, &latest_published) {
+        (Some(committed), Some(published)) => {
+            published.source_version_id == Some(committed.id)
+        }
+        _ => false,
+    };
 
     let version_view = current_version.as_ref().map(|v| {
         json!({
@@ -289,6 +334,16 @@ pub async fn admin_content_show(
     let mut ctx = Context::new();
     ctx.insert("node", &json!({ "id": node.id, "slug": &node.slug }));
     ctx.insert("version", &version_view);
+    ctx.insert("has_latest_committed", &latest_committed.is_some());
+    ctx.insert("has_uncommitted", &has_uncommitted);
+    ctx.insert("publish_up_to_date", &publish_up_to_date);
+    ctx.insert("is_published", &latest_published.is_some());
+    ctx.insert(
+        "published_at",
+        &latest_published
+            .as_ref()
+            .and_then(|v| v.committed_at.map(format_datetime)),
+    );
 
     render_page(
         &data.templates,
@@ -621,6 +676,77 @@ pub async fn admin_content_commit(
         Err(_) => redirect_with_alert(
             &format!("/admin/content/{}", node.id),
             "Failed to commit version.",
+        ),
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Admin content — Publish
+// ---------------------------------------------------------------------------
+
+/// POST /admin/content/{id}/publish — Publish the latest committed version.
+///
+/// Creates a new committed version on the "published" branch that copies the
+/// content from the latest committed version on main. Mirrors Rails' publish action.
+pub async fn admin_content_publish(
+    data: web::Data<AppState>,
+    path: web::Path<String>,
+) -> HttpResponse {
+    let id = match parse_id(&path.into_inner()) {
+        Some(id) => id,
+        None => {
+            return HttpResponse::NotFound()
+                .content_type("text/plain")
+                .body("Not Found");
+        }
+    };
+
+    let node = match Node::find(&data.db, id).await {
+        Ok(Some(node)) => node,
+        Ok(None) | Err(_) => {
+            return HttpResponse::NotFound()
+                .content_type("text/plain")
+                .body("Not Found");
+        }
+    };
+
+    let main_branch = match Branch::find_by_name(&data.db, "main").await {
+        Ok(Some(b)) => b,
+        _ => {
+            return HttpResponse::InternalServerError()
+                .content_type("text/plain")
+                .body("Main branch not found");
+        }
+    };
+
+    let latest_committed = match Version::latest_committed(&data.db, node.id, main_branch.id).await
+    {
+        Ok(Some(v)) => v,
+        _ => {
+            return redirect_with_alert(
+                &format!("/admin/content/{}", node.id),
+                "No committed version to publish.",
+            );
+        }
+    };
+
+    let published_branch = match Branch::find_by_name(&data.db, "published").await {
+        Ok(Some(b)) => b,
+        _ => {
+            return HttpResponse::InternalServerError()
+                .content_type("text/plain")
+                .body("Published branch not found");
+        }
+    };
+
+    match Version::publish(&data.db, &latest_committed, published_branch.id).await {
+        Ok(_) => redirect_with_notice(
+            &format!("/admin/content/{}", node.id),
+            "Node was successfully published.",
+        ),
+        Err(_) => redirect_with_alert(
+            &format!("/admin/content/{}", node.id),
+            "Failed to publish version.",
         ),
     }
 }

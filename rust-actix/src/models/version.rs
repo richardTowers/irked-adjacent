@@ -261,6 +261,61 @@ impl Version {
         })
     }
 
+    /// Check whether any committed version exists for a node on a given branch.
+    pub async fn has_committed(
+        pool: &SqlitePool,
+        node_id: i64,
+        branch_id: i64,
+    ) -> Result<bool, sqlx::Error> {
+        let count = sqlx::query_scalar::<_, i64>(
+            "SELECT COUNT(*) FROM versions
+             WHERE node_id = ? AND branch_id = ? AND committed_at IS NOT NULL",
+        )
+        .bind(node_id)
+        .bind(branch_id)
+        .fetch_one(pool)
+        .await?;
+        Ok(count > 0)
+    }
+
+    /// Publish a committed version by creating a new committed version on the
+    /// "published" branch. This copies the content (title, body) from the source
+    /// version and records the lineage via `source_version_id`.
+    ///
+    /// Mirrors Rails' `Version.publish!(source_version)`.
+    pub async fn publish(
+        pool: &SqlitePool,
+        source: &Version,
+        published_branch_id: i64,
+    ) -> Result<Version, sqlx::Error> {
+        let now = chrono::Utc::now().naive_utc();
+
+        // Find the latest published version to use as parent
+        let parent = Self::latest_committed(pool, source.node_id, published_branch_id).await?;
+
+        let id = sqlx::query_scalar::<_, i64>(
+            "INSERT INTO versions
+             (node_id, branch_id, parent_version_id, source_version_id,
+              title, body, commit_message, committed_at, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+             RETURNING id",
+        )
+        .bind(source.node_id)
+        .bind(published_branch_id)
+        .bind(parent.map(|p| p.id))
+        .bind(source.id)
+        .bind(&source.title)
+        .bind(&source.body)
+        .bind("Publish from main")
+        .bind(now)
+        .bind(now)
+        .bind(now)
+        .fetch_one(pool)
+        .await?;
+
+        Self::find(pool, id).await
+    }
+
     /// Find a version by its primary key.
     async fn find(pool: &SqlitePool, id: i64) -> Result<Version, sqlx::Error> {
         sqlx::query_as::<_, Version>("SELECT * FROM versions WHERE id = ?")

@@ -24,6 +24,15 @@
   {% else %}
     <dd>Draft</dd>
   {% endif %}
+
+  <dt>Published</dt>
+  {% if not is_published %}
+    <dd>Not published</dd>
+  {% elif publish_up_to_date %}
+    <dd>Published ({{ published_at }})</dd>
+  {% else %}
+    <dd>Published (updates pending) ({{ published_at }})</dd>
+  {% endif %}
 </dl>
 
 {% if version and version.is_uncommitted %}
@@ -36,6 +45,22 @@
       <input type="submit" value="Commit">
     </div>
   </form>
+{% endif %}
+
+{% if has_latest_committed %}
+  {% if not publish_up_to_date %}
+    {% if has_uncommitted %}
+      <p>Commit your draft before publishing</p>
+    {% else %}
+      <form method="post" action="/admin/content/{{ node.id }}/publish">
+        <button type="submit">Publish</button>
+      </form>
+    {% endif %}
+  {% endif %}
+{% else %}
+  {% if has_uncommitted %}
+    <p>Commit your draft before publishing</p>
+  {% endif %}
 {% endif %}
 
 <a href="/admin/content/{{ node.id }}/edit">Edit Node</a>

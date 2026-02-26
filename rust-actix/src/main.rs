@@ -57,6 +57,7 @@ async fn main() -> std::io::Result<()> {
             // Member routes with fixed suffixes before bare {id}
             .route("/admin/content/{id}/edit", web::get().to(routes::admin_content_edit))
             .route("/admin/content/{id}/commit", web::post().to(routes::admin_content_commit))
+            .route("/admin/content/{id}/publish", web::post().to(routes::admin_content_publish))
             .route("/admin/content/{id}", web::get().to(routes::admin_content_show))
             .route("/admin/content/{id}", web::delete().to(routes::admin_content_destroy))
             // POST with _method override — lets HTML forms tunnel DELETE and PATCH
