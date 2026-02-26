@@ -19,6 +19,15 @@
   <% else %>
     <dd>Draft</dd>
   <% end %>
+
+  <dt>Published</dt>
+  <% if @latest_published.nil? %>
+    <dd>Not published</dd>
+  <% elsif @latest_committed && @latest_published.source_version_id == @latest_committed.id %>
+    <dd>Published (<%= @latest_published.committed_at.strftime("%-d %B %Y %H:%M") %>)</dd>
+  <% else %>
+    <dd>Published (updates pending) (<%= @latest_published.committed_at.strftime("%-d %B %Y %H:%M") %>)</dd>
+  <% end %>
 </dl>
 
 <% if @current_version && @current_version.committed_at.nil? %>
@@ -32,6 +41,24 @@
       <input type="submit" value="Commit">
     </div>
   </form>
+<% end %>
+
+<% if @latest_committed %>
+  <% publish_up_to_date = @latest_published && @latest_published.source_version_id == @latest_committed.id %>
+  <% unless publish_up_to_date %>
+    <% if @has_uncommitted %>
+      <p>Commit your draft before publishing</p>
+    <% else %>
+      <form action="<%= publish_admin_content_path(@node) %>" method="post">
+        <input type="hidden" name="authenticity_token" value="<%= form_authenticity_token %>">
+        <button type="submit">Publish</button>
+      </form>
+    <% end %>
+  <% end %>
+<% else %>
+  <% if @has_uncommitted %>
+    <p>Commit your draft before publishing</p>
+  <% end %>
 <% end %>
 
 <%= link_to "Edit Node", "/admin/content/#{@node.id}/edit" %>

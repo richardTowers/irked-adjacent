@@ -15,9 +15,13 @@ Rails.application.routes.draw do
     resources :content, only: [:index, :show, :new, :create, :edit, :update, :destroy], controller: "content", constraints: { id: /\d+/ } do
       member do
         post :commit
+        post :publish
       end
     end
   end
 
   root to: redirect("/admin/content")
+
+  # Public content route — must be last to avoid intercepting other paths
+  get "/:slug", to: "public/content#show", as: :public_content, constraints: { slug: /[a-z0-9]+(-[a-z0-9]+)*/ }
 end

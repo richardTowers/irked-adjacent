@@ -41,7 +41,23 @@ RSpec.describe "Admin::Content", type: :request do
         expect(response.body).to include("<th scope=\"col\">Title</th>")
         expect(response.body).to include("<th scope=\"col\">Slug</th>")
         expect(response.body).to include("<th scope=\"col\">Status</th>")
+        expect(response.body).to include("<th scope=\"col\">Published</th>")
         expect(response.body).to include("<th scope=\"col\">Updated</th>")
+      end
+
+      it "displays the Published column correctly" do
+        # Publish the older_node
+        committed_version = Version.committed.where(node: older_node, branch: main_branch).first
+        Version.publish!(committed_version)
+
+        get "/admin/content"
+
+        body = response.body
+        older_row = body[body.index("Older Post")..body.index("Older Post") + 300]
+        newer_row = body[body.index("Newer Post")..body.index("Newer Post") + 300]
+
+        expect(older_row).to include(">Yes<")
+        expect(newer_row).to include(">No<")
       end
 
       it "orders nodes by updated_at descending" do
@@ -548,6 +564,171 @@ RSpec.describe "Admin::Content", type: :request do
         version = Version.committed.where(node: node, branch: main_branch).last
         expect(version.committed_at).not_to eq(Time.zone.parse("2000-01-01"))
       end
+    end
+  end
+
+  describe "POST /admin/content/:id/publish" do
+    let!(:node) do
+      node, version = create_node(title: "Publishable Node")
+      version.commit!("Ready to publish")
+      node
+    end
+
+    context "with a committed version" do
+      it "publishes the version and redirects to the show page" do
+        post "/admin/content/#{node.id}/publish"
+
+        expect(response).to redirect_to(admin_content_path(node))
+      end
+
+      it "shows a success flash message" do
+        post "/admin/content/#{node.id}/publish"
+
+        follow_redirect!
+
+        expect(response.body).to include("Node was successfully published.")
+        expect(response.body).to include('role="status"')
+      end
+
+      it "creates a version on the published branch" do
+        published_branch = Branch.find_by!(name: "published")
+
+        expect {
+          post "/admin/content/#{node.id}/publish"
+        }.to change { Version.where(branch: published_branch).count }.by(1)
+
+        published_version = Version.where(node: node, branch: published_branch).last
+        expect(published_version.commit_message).to eq("Publish from main")
+        expect(published_version.source_version).to eq(Version.committed.where(node: node, branch: main_branch).last)
+      end
+    end
+
+    context "when already up-to-date" do
+      it "redirects with an alert" do
+        post "/admin/content/#{node.id}/publish"
+
+        # Publish again without changes
+        post "/admin/content/#{node.id}/publish"
+
+        expect(response).to redirect_to(admin_content_path(node))
+
+        follow_redirect!
+
+        expect(response.body).to include("Published version is already up to date.")
+        expect(response.body).to include('role="alert"')
+      end
+    end
+
+    context "when no committed version exists" do
+      it "redirects with an alert" do
+        # Create a node with only an uncommitted version
+        new_node, _version = create_node(title: "Draft Only")
+
+        post "/admin/content/#{new_node.id}/publish"
+
+        expect(response).to redirect_to(admin_content_path(new_node))
+
+        follow_redirect!
+
+        expect(response.body).to include("No committed version to publish.")
+        expect(response.body).to include('role="alert"')
+      end
+    end
+
+    it "returns 404 for a non-existent ID" do
+      post "/admin/content/999999/publish"
+
+      expect(response).to have_http_status(:not_found)
+    end
+
+    it "returns 404 for a non-integer ID" do
+      post "/admin/content/abc/publish"
+
+      expect(response).to have_http_status(:not_found)
+    end
+  end
+
+  describe "show page — published status" do
+    let!(:node) do
+      node, version = create_node(title: "Status Node")
+      version.commit!("First commit")
+      node
+    end
+
+    it "displays 'Not published' when node has no published version" do
+      get "/admin/content/#{node.id}"
+
+      expect(response.body).to include("Not published")
+    end
+
+    it "displays 'Published' when up-to-date" do
+      committed = Version.committed.where(node: node, branch: main_branch).last
+      Version.publish!(committed)
+
+      get "/admin/content/#{node.id}"
+
+      expect(response.body).to include("Published (")
+      expect(response.body).not_to include("updates pending")
+    end
+
+    it "displays 'Published (updates pending)' when newer commits exist on main" do
+      committed = Version.committed.where(node: node, branch: main_branch).last
+      Version.publish!(committed)
+
+      # Create a new committed version
+      draft = Version.create!(node: node, branch: main_branch, title: "Updated", parent_version: committed)
+      draft.commit!("Second commit")
+
+      get "/admin/content/#{node.id}"
+
+      expect(response.body).to include("Published (updates pending)")
+    end
+
+    it "shows publish button when committed and not yet published" do
+      get "/admin/content/#{node.id}"
+
+      expect(response.body).to include("Publish")
+      expect(response.body).to include("publish")
+    end
+
+    it "does not show publish button when published and up-to-date" do
+      committed = Version.committed.where(node: node, branch: main_branch).last
+      Version.publish!(committed)
+
+      get "/admin/content/#{node.id}"
+
+      expect(response.body).not_to include(">Publish<")
+    end
+
+    it "shows 'Commit your draft before publishing' when uncommitted draft exists" do
+      # Create a new uncommitted version
+      committed = Version.committed.where(node: node, branch: main_branch).last
+      Version.create!(node: node, branch: main_branch, title: "Draft", parent_version: committed)
+
+      get "/admin/content/#{node.id}"
+
+      expect(response.body).to include("Commit your draft before publishing")
+    end
+
+    it "shows publish button when published but with newer commits and no draft" do
+      committed = Version.committed.where(node: node, branch: main_branch).last
+      Version.publish!(committed)
+
+      # Create and commit a new version
+      draft = Version.create!(node: node, branch: main_branch, title: "Updated", parent_version: committed)
+      draft.commit!("Second commit")
+
+      get "/admin/content/#{node.id}"
+
+      expect(response.body).to include(">Publish<")
+    end
+
+    it "shows 'Commit your draft before publishing' for never-published node with only a draft" do
+      draft_node, _version = create_node(title: "Only Draft")
+
+      get "/admin/content/#{draft_node.id}"
+
+      expect(response.body).to include("Commit your draft before publishing")
     end
   end
 

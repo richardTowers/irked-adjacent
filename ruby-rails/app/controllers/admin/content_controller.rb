@@ -3,12 +3,17 @@ module Admin
     def index
       @nodes = Node.order(updated_at: :desc)
       @main_branch = Branch.find_by!(name: "main")
+      @published_branch = Branch.find_by!(name: "published")
     end
 
     def show
       @node = Node.find(params[:id])
       @main_branch = Branch.find_by!(name: "main")
+      @published_branch = Branch.find_by!(name: "published")
       @current_version = Version.current_for(@node, @main_branch)
+      @latest_committed = @node.versions.committed.where(branch: @main_branch).order(committed_at: :desc).first
+      @latest_published = @node.versions.committed.where(branch: @published_branch).order(committed_at: :desc).first
+      @has_uncommitted = @node.versions.uncommitted.where(branch: @main_branch).exists?
     end
 
     def new
@@ -88,6 +93,29 @@ module Admin
 
       @current_version.commit!(message)
       redirect_to admin_content_path(@node), notice: "Version was successfully committed."
+    end
+
+    def publish
+      @node = Node.find(params[:id])
+      @main_branch = Branch.find_by!(name: "main")
+
+      latest_committed = @node.versions.committed.where(branch: @main_branch).order(committed_at: :desc).first
+
+      unless latest_committed
+        redirect_to admin_content_path(@node), alert: "No committed version to publish."
+        return
+      end
+
+      published_branch = Branch.find_by!(name: "published")
+      latest_published = @node.versions.committed.where(branch: published_branch).order(committed_at: :desc).first
+
+      if latest_published && latest_published.source_version_id == latest_committed.id
+        redirect_to admin_content_path(@node), alert: "Published version is already up to date."
+        return
+      end
+
+      Version.publish!(latest_committed)
+      redirect_to admin_content_path(@node), notice: "Node was successfully published."
     end
 
     def destroy

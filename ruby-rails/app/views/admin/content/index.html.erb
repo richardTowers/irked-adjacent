@@ -11,16 +11,19 @@
         <th scope="col">Title</th>
         <th scope="col">Slug</th>
         <th scope="col">Status</th>
+        <th scope="col">Published</th>
         <th scope="col">Updated</th>
       </tr>
     </thead>
     <tbody>
       <% @nodes.each do |node| %>
         <% current_version = Version.current_for(node, @main_branch) %>
+        <% is_published = node.versions.committed.where(branch: @published_branch).exists? %>
         <tr>
           <td><%= link_to current_version&.title, admin_content_path(node) %></td>
           <td><%= node.slug %></td>
           <td><%= current_version&.committed_at ? "Committed" : "Draft" %></td>
+          <td><%= is_published ? "Yes" : "No" %></td>
           <td><%= node.updated_at.strftime("%-d %B %Y %H:%M") %></td>
         </tr>
       <% end %>
