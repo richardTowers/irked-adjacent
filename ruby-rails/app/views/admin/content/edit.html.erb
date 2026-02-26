@@ -1,3 +1,8 @@
 <h1>Edit Node</h1>
 
-<%= render "form", url: admin_content_path(@node), submit_label: "Update Node", cancel_path: admin_content_path(@node) %>
+<dl>
+  <dt>Slug</dt>
+  <dd><%= @node.slug %></dd>
+</dl>
+
+<%= render "form", url: admin_content_path(@node), method: :patch, submit_label: "Save Draft", cancel_path: admin_content_path(@node), show_slug_field: false %>

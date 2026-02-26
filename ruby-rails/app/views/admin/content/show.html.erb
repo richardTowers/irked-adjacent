@@ -1,25 +1,39 @@
-<h1><%= @node.title %></h1>
+<h1><%= @current_version&.title %></h1>
 
 <dl>
   <dt>Slug</dt>
   <dd><%= @node.slug %></dd>
 
   <dt>Body</dt>
-  <dd><%= @node.body %></dd>
+  <dd><%= @current_version&.body %></dd>
 
   <dt>Status</dt>
-  <dd><%= @node.published? ? "Published" : "Draft" %></dd>
+  <% if @current_version&.committed_at %>
+    <dd>Committed</dd>
 
-  <dt>Published At</dt>
-  <dd><%= @node.published_at ? @node.published_at.strftime("%-d %B %Y %H:%M") : "—" %></dd>
+    <dt>Commit Message</dt>
+    <dd><%= @current_version.commit_message %></dd>
 
-  <dt>Created At</dt>
-  <dd><%= @node.created_at.strftime("%-d %B %Y %H:%M") %></dd>
-
-  <dt>Updated At</dt>
-  <dd><%= @node.updated_at.strftime("%-d %B %Y %H:%M") %></dd>
+    <dt>Committed At</dt>
+    <dd><%= @current_version.committed_at.strftime("%-d %B %Y %H:%M") %></dd>
+  <% else %>
+    <dd>Draft</dd>
+  <% end %>
 </dl>
 
-<%= link_to "Back to content", admin_content_index_path %>
-<%= link_to "Edit", "/admin/content/#{@node.id}/edit" %>
+<% if @current_version && @current_version.committed_at.nil? %>
+  <form action="<%= commit_admin_content_path(@node) %>" method="post">
+    <input type="hidden" name="authenticity_token" value="<%= form_authenticity_token %>">
+    <div>
+      <label for="commit_message">Commit message</label>
+      <input type="text" name="commit[commit_message]" id="commit_message">
+    </div>
+    <div>
+      <input type="submit" value="Commit">
+    </div>
+  </form>
+<% end %>
+
+<%= link_to "Edit Node", "/admin/content/#{@node.id}/edit" %>
+<%= link_to "Back to Nodes", admin_content_index_path %>
 <%= button_to "Delete Node", admin_content_path(@node), method: :delete, data: { confirm: "Are you sure you want to delete this node? This action cannot be undone." } %>

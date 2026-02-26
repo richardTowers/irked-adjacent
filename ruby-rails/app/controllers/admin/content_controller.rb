@@ -2,38 +2,92 @@ module Admin
   class ContentController < ApplicationController
     def index
       @nodes = Node.order(updated_at: :desc)
+      @main_branch = Branch.find_by!(name: "main")
     end
 
     def show
       @node = Node.find(params[:id])
+      @main_branch = Branch.find_by!(name: "main")
+      @current_version = Version.current_for(@node, @main_branch)
     end
 
     def new
       @node = Node.new
+      @version = Version.new
     end
 
     def create
-      @node = Node.new(node_params)
-
-      if @node.save
+      begin
+        @node, @version = Node.create_with_version(
+          title: create_params[:title],
+          slug: create_params[:slug],
+          body: create_params[:body]
+        )
         redirect_to admin_content_path(@node), notice: "Node was successfully created."
-      else
+      rescue ActiveRecord::RecordInvalid => e
+        @node = e.record.is_a?(Node) ? e.record : Node.new(slug: create_params[:slug])
+        @version = e.record.is_a?(Version) ? e.record : Version.new(title: create_params[:title], body: create_params[:body])
+        # Ensure version errors are populated even when the node failed first
+        @version.valid? unless @version.errors.any?
         render :new, status: :unprocessable_entity
       end
     end
 
     def edit
       @node = Node.find(params[:id])
+      @main_branch = Branch.find_by!(name: "main")
+      @current_version = Version.current_for(@node, @main_branch)
+      @version = Version.new(title: @current_version&.title, body: @current_version&.body)
     end
 
     def update
       @node = Node.find(params[:id])
+      @main_branch = Branch.find_by!(name: "main")
 
-      if @node.update(node_params)
-        redirect_to admin_content_path(@node), notice: "Node was successfully updated."
+      @version = Version.uncommitted.find_by(node: @node, branch: @main_branch)
+
+      if @version
+        @version.assign_attributes(update_params)
+      else
+        latest_committed = Version.committed
+                                   .where(node: @node, branch: @main_branch)
+                                   .order(committed_at: :desc)
+                                   .first
+        @version = Version.new(
+          node: @node,
+          branch: @main_branch,
+          parent_version: latest_committed,
+          **update_params
+        )
+      end
+
+      if @version.save
+        redirect_to admin_content_path(@node), notice: "Draft was successfully saved."
       else
         render :edit, status: :unprocessable_entity
       end
+    end
+
+    def commit
+      @node = Node.find(params[:id])
+      @main_branch = Branch.find_by!(name: "main")
+
+      @current_version = Version.uncommitted.find_by(node: @node, branch: @main_branch)
+
+      unless @current_version
+        redirect_to admin_content_path(@node), alert: "No uncommitted changes to commit."
+        return
+      end
+
+      message = params.dig(:commit, :commit_message).to_s
+
+      if message.blank?
+        redirect_to admin_content_path(@node), alert: "Commit message can't be blank."
+        return
+      end
+
+      @current_version.commit!(message)
+      redirect_to admin_content_path(@node), notice: "Version was successfully committed."
     end
 
     def destroy
@@ -44,8 +98,12 @@ module Admin
 
     private
 
-    def node_params
-      params.require(:node).permit(:title, :slug, :body, :published)
+    def create_params
+      params.require(:node).permit(:title, :slug, :body)
+    end
+
+    def update_params
+      params.require(:node).permit(:title, :body)
     end
   end
 end

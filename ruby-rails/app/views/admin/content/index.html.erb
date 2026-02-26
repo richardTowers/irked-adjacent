@@ -1,9 +1,9 @@
-<h1>Content</h1>
+<h1>Nodes</h1>
 
 <%= link_to "New Node", "/admin/content/new" %>
 
 <% if @nodes.empty? %>
-  <p>No content yet.</p>
+  <p>No nodes yet.</p>
 <% else %>
   <table>
     <thead>
@@ -16,10 +16,11 @@
     </thead>
     <tbody>
       <% @nodes.each do |node| %>
+        <% current_version = Version.current_for(node, @main_branch) %>
         <tr>
-          <td><%= link_to node.title, admin_content_path(node) %></td>
+          <td><%= link_to current_version&.title, admin_content_path(node) %></td>
           <td><%= node.slug %></td>
-          <td><%= node.published? ? "Published" : "Draft" %></td>
+          <td><%= current_version&.committed_at ? "Committed" : "Draft" %></td>
           <td><%= node.updated_at.strftime("%-d %B %Y %H:%M") %></td>
         </tr>
       <% end %>
