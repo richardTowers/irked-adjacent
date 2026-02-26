@@ -1,14 +1,14 @@
 {% extends "base.html" %}
 
-{% block title %}Content — CMS{% endblock %}
+{% block title %}Nodes — CMS{% endblock %}
 
 {% block content %}
-<h1>Content</h1>
+<h1>Nodes</h1>
 
 <a href="/admin/content/new">New Node</a>
 
 {% if nodes | length == 0 %}
-  <p>No content yet.</p>
+  <p>No nodes yet.</p>
 {% else %}
   <table>
     <thead>
@@ -24,7 +24,7 @@
         <tr>
           <td><a href="/admin/content/{{ node.id }}">{{ node.title }}</a></td>
           <td>{{ node.slug }}</td>
-          <td>{% if node.published %}Published{% else %}Draft{% endif %}</td>
+          <td>{{ node.status }}</td>
           <td>{{ node.updated_at }}</td>
         </tr>
       {% endfor %}

@@ -4,6 +4,9 @@ use sqlx::SqlitePool;
 use std::collections::HashMap;
 use std::sync::LazyLock;
 
+use super::branch::Branch;
+use super::version::{NewVersion, Version};
+
 /// Regex for valid slug format: lowercase alphanumeric segments separated by single hyphens.
 /// Equivalent to the Rails validation: /\A[a-z0-9]+(-[a-z0-9]+)*\z/
 static SLUG_RE: LazyLock<Regex> =
@@ -19,36 +22,22 @@ static MULTI_HYPHEN_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"-{2,}").
 // Domain types
 // ---------------------------------------------------------------------------
 
-/// A Node as stored in the database (all fields populated).
+/// A Node as stored in the database. After VERS-01, nodes only hold identity
+/// (slug) — content (title, body) lives in the `versions` table.
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct Node {
     pub id: i64,
-    pub title: String,
     pub slug: String,
-    pub body: Option<String>,
-    pub published: bool,
-    pub published_at: Option<NaiveDateTime>,
     pub created_at: NaiveDateTime,
     pub updated_at: NaiveDateTime,
 }
 
-/// Parameters for creating a new node. Only the fields that callers are allowed
-/// to set — mirrors Rails' strong parameters (`title`, `slug`, `body`, `published`).
-#[derive(Debug, Default)]
-pub struct NewNode {
-    pub title: String,
-    pub slug: Option<String>,
-    pub body: Option<String>,
-    pub published: bool,
-}
-
-/// Parameters for updating an existing node. Same permitted fields as creation.
+/// Parameters for creating a new node with its first version (atomic operation).
 #[derive(Debug)]
-pub struct UpdateNode {
+pub struct CreateNodeWithVersion {
     pub title: String,
     pub slug: Option<String>,
     pub body: Option<String>,
-    pub published: bool,
 }
 
 /// Validation errors keyed by field name, each with a list of messages.
@@ -76,6 +65,15 @@ impl ValidationErrors {
 
     pub fn all(&self) -> &HashMap<String, Vec<String>> {
         &self.errors
+    }
+
+    /// Merge another set of errors into this one.
+    pub fn merge(&mut self, other: &ValidationErrors) {
+        for (field, messages) in &other.errors {
+            for msg in messages {
+                self.add(field, msg);
+            }
+        }
     }
 
     /// Return error messages prefixed by their capitalized field name,
@@ -131,26 +129,14 @@ pub fn generate_slug(title: &str) -> String {
 // Validation
 // ---------------------------------------------------------------------------
 
-/// Validates fields for a node (used by both create and update paths).
-/// The `slug` passed in should already have auto-generation applied.
-/// `existing_id` is `Some(id)` when updating, so the uniqueness check can
-/// exclude the node being updated.
-async fn validate_node(
+/// Validates slug fields for a node. Title validation has moved to Version.
+async fn validate_slug(
     pool: &SqlitePool,
-    title: &str,
     slug: &str,
     existing_id: Option<i64>,
 ) -> ValidationErrors {
     let mut errors = ValidationErrors::default();
 
-    // Title validations
-    if title.is_empty() {
-        errors.add("title", "can't be blank");
-    } else if title.len() > 255 {
-        errors.add("title", "is too long (maximum is 255 characters)");
-    }
-
-    // Slug validations
     if slug.is_empty() {
         errors.add("slug", "can't be blank");
     } else {
@@ -160,7 +146,7 @@ async fn validate_node(
         if !SLUG_RE.is_match(slug) {
             errors.add("slug", "is invalid");
         }
-        // Check uniqueness (case-insensitive) — must hit the database, like Rails.
+        // Check uniqueness (case-insensitive)
         let duplicate_exists = match existing_id {
             Some(id) => {
                 sqlx::query_scalar::<_, i64>(
@@ -212,52 +198,81 @@ impl Node {
             .await
     }
 
-    /// Create a new node. Applies slug auto-generation and published_at logic,
-    /// then validates. Returns the persisted `Node` or `ValidationErrors`.
-    pub async fn create(
+    /// Create a new node together with its first (uncommitted) version on the
+    /// main branch. This is an atomic operation — if either the node or version
+    /// fails validation, nothing is persisted.
+    ///
+    /// Mirrors Rails' `Node.create_with_version(title:, slug:, body:)`.
+    pub async fn create_with_version(
         pool: &SqlitePool,
-        params: NewNode,
-    ) -> Result<Node, ValidationErrors> {
-        let now = chrono::Utc::now().naive_utc();
-
+        params: CreateNodeWithVersion,
+    ) -> Result<(Node, Version), ValidationErrors> {
         // Auto-generate slug from title when slug is blank/absent
-        // (mirrors Rails' before_validation callback)
         let slug = match &params.slug {
             Some(s) if !s.is_empty() => s.clone(),
             _ => generate_slug(&params.title),
         };
 
-        let errors = validate_node(pool, &params.title, &slug, None).await;
-        if !errors.is_empty() {
-            return Err(errors);
+        // Validate slug
+        let slug_errors = validate_slug(pool, &slug, None).await;
+
+        // Validate title (Version-level validation)
+        let title_errors = super::version::validate_version(&params.title);
+
+        // Combine errors from both node and version validation
+        let mut all_errors = ValidationErrors::default();
+        all_errors.merge(&slug_errors);
+        all_errors.merge(&title_errors);
+
+        if !all_errors.is_empty() {
+            return Err(all_errors);
         }
 
-        // Set published_at when creating as published (false -> true transition)
-        let published_at = if params.published { Some(now) } else { None };
+        let now = chrono::Utc::now().naive_utc();
 
-        let id = sqlx::query_scalar::<_, i64>(
-            "INSERT INTO nodes (title, slug, body, published, published_at, created_at, updated_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?)
-             RETURNING id",
+        // Find the main branch
+        let main_branch = Branch::find_by_name(pool, "main")
+            .await
+            .map_err(|e| {
+                let mut errors = ValidationErrors::default();
+                errors.add("base", &format!("database error: {e}"));
+                errors
+            })?
+            .ok_or_else(|| {
+                let mut errors = ValidationErrors::default();
+                errors.add("base", "main branch not found");
+                errors
+            })?;
+
+        // Insert node
+        let node_id = sqlx::query_scalar::<_, i64>(
+            "INSERT INTO nodes (slug, created_at, updated_at) VALUES (?, ?, ?) RETURNING id",
         )
-        .bind(&params.title)
         .bind(&slug)
-        .bind(&params.body)
-        .bind(params.published)
-        .bind(published_at)
         .bind(now)
         .bind(now)
         .fetch_one(pool)
         .await
         .map_err(|e| {
-            // Database-level constraint violation (e.g. unique index race condition)
             let mut errors = ValidationErrors::default();
             errors.add("base", &format!("database error: {e}"));
             errors
         })?;
 
-        // Return the freshly-inserted row
-        Node::find(pool, id)
+        // Insert first uncommitted version on main
+        let version = Version::create(
+            pool,
+            NewVersion {
+                node_id,
+                branch_id: main_branch.id,
+                parent_version_id: None,
+                title: params.title,
+                body: params.body,
+            },
+        )
+        .await?;
+
+        let node = Node::find(pool, node_id)
             .await
             .map_err(|e| {
                 let mut errors = ValidationErrors::default();
@@ -268,72 +283,13 @@ impl Node {
                 let mut errors = ValidationErrors::default();
                 errors.add("base", "failed to reload node after insert");
                 errors
-            })
+            })?;
+
+        Ok((node, version))
     }
 
-    /// Update an existing node. Applies slug auto-generation and published_at
-    /// logic, then validates. Returns the updated `Node` or `ValidationErrors`.
-    pub async fn update(
-        &self,
-        pool: &SqlitePool,
-        params: UpdateNode,
-    ) -> Result<Node, ValidationErrors> {
-        let now = chrono::Utc::now().naive_utc();
-
-        // Auto-generate slug from title when slug is blank/absent
-        let slug = match &params.slug {
-            Some(s) if !s.is_empty() => s.clone(),
-            _ => generate_slug(&params.title),
-        };
-
-        let errors = validate_node(pool, &params.title, &slug, Some(self.id)).await;
-        if !errors.is_empty() {
-            return Err(errors);
-        }
-
-        // Published_at logic (mirrors Rails' before_save callback):
-        // - Set published_at only when transitioning false -> true AND it's currently nil.
-        // - Preserve existing published_at in all other cases.
-        let published_at = if !self.published && params.published && self.published_at.is_none() {
-            Some(now)
-        } else {
-            self.published_at
-        };
-
-        sqlx::query(
-            "UPDATE nodes SET title = ?, slug = ?, body = ?, published = ?, published_at = ?, updated_at = ?
-             WHERE id = ?",
-        )
-        .bind(&params.title)
-        .bind(&slug)
-        .bind(&params.body)
-        .bind(params.published)
-        .bind(published_at)
-        .bind(now)
-        .bind(self.id)
-        .execute(pool)
-        .await
-        .map_err(|e| {
-            let mut errors = ValidationErrors::default();
-            errors.add("base", &format!("database error: {e}"));
-            errors
-        })?;
-
-        Node::find(pool, self.id)
-            .await
-            .map_err(|e| {
-                let mut errors = ValidationErrors::default();
-                errors.add("base", &format!("failed to reload node: {e}"));
-                errors
-            })?
-            .ok_or_else(|| {
-                let mut errors = ValidationErrors::default();
-                errors.add("base", "failed to reload node after update");
-                errors
-            })
-    }
-
-    /// Delete a node by its primary key. Returns true if a row was deleted.
+    /// Delete a node by its primary key. Cascades to all versions (via FK).
+    /// Returns true if a row was deleted.
     pub async fn delete(pool: &SqlitePool, id: i64) -> Result<bool, sqlx::Error> {
         let result = sqlx::query("DELETE FROM nodes WHERE id = ?")
             .bind(id)
@@ -352,20 +308,22 @@ mod tests {
     use super::*;
     use sqlx::SqlitePool;
 
-    /// Create an in-memory SQLite database with the nodes schema applied.
+    /// Create an in-memory SQLite database with the new versioned schema.
     async fn test_pool() -> SqlitePool {
         let pool = SqlitePool::connect("sqlite::memory:")
             .await
             .expect("failed to create in-memory pool");
 
+        // Enable foreign keys for SQLite
+        sqlx::query("PRAGMA foreign_keys = ON")
+            .execute(&pool)
+            .await
+            .expect("failed to enable foreign keys");
+
         sqlx::query(
             "CREATE TABLE nodes (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                title TEXT NOT NULL,
                 slug TEXT NOT NULL,
-                body TEXT,
-                published BOOLEAN NOT NULL DEFAULT 0,
-                published_at DATETIME,
                 created_at DATETIME NOT NULL,
                 updated_at DATETIME NOT NULL
             )",
@@ -378,6 +336,60 @@ mod tests {
             .execute(&pool)
             .await
             .expect("failed to create slug index");
+
+        sqlx::query(
+            "CREATE TABLE branches (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                created_at DATETIME NOT NULL,
+                updated_at DATETIME NOT NULL
+            )",
+        )
+        .execute(&pool)
+        .await
+        .expect("failed to create branches table");
+
+        sqlx::query("CREATE UNIQUE INDEX index_branches_on_name ON branches (name)")
+            .execute(&pool)
+            .await
+            .expect("failed to create branch name index");
+
+        // Seed the main and published branches
+        sqlx::query(
+            "INSERT INTO branches (name, created_at, updated_at)
+             VALUES ('main', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+                    ('published', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)",
+        )
+        .execute(&pool)
+        .await
+        .expect("failed to seed branches");
+
+        sqlx::query(
+            "CREATE TABLE versions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                node_id INTEGER NOT NULL REFERENCES nodes(id) ON DELETE CASCADE,
+                branch_id INTEGER NOT NULL REFERENCES branches(id) ON DELETE RESTRICT,
+                parent_version_id INTEGER REFERENCES versions(id) ON DELETE SET NULL,
+                source_version_id INTEGER REFERENCES versions(id) ON DELETE SET NULL,
+                title TEXT NOT NULL,
+                body TEXT,
+                commit_message TEXT,
+                committed_at DATETIME,
+                created_at DATETIME NOT NULL,
+                updated_at DATETIME NOT NULL
+            )",
+        )
+        .execute(&pool)
+        .await
+        .expect("failed to create versions table");
+
+        sqlx::query(
+            "CREATE UNIQUE INDEX index_versions_uncommitted_unique
+             ON versions (node_id, branch_id) WHERE committed_at IS NULL",
+        )
+        .execute(&pool)
+        .await
+        .expect("failed to create uncommitted unique index");
 
         pool
     }
@@ -417,48 +429,69 @@ mod tests {
         assert_eq!(generate_slug("!!!"), "");
     }
 
-    // -- Validations ---------------------------------------------------------
+    // -- Node.create_with_version -------------------------------------------
 
     #[tokio::test]
-    async fn valid_with_title_and_auto_generated_slug() {
+    async fn creates_node_and_version() {
         let pool = test_pool().await;
-        let result = Node::create(
+        let (node, version) = Node::create_with_version(
             &pool,
-            NewNode {
+            CreateNodeWithVersion {
                 title: "Hello World".into(),
-                ..Default::default()
+                slug: None,
+                body: None,
             },
         )
-        .await;
-        assert!(result.is_ok());
-        let node = result.unwrap();
+        .await
+        .unwrap();
+
         assert_eq!(node.slug, "hello-world");
+        assert_eq!(version.title, "Hello World");
+        assert_eq!(version.node_id, node.id);
+        assert!(version.committed_at.is_none()); // uncommitted
     }
 
     #[tokio::test]
-    async fn requires_a_title() {
+    async fn uses_explicit_slug() {
         let pool = test_pool().await;
-        let result = Node::create(
+        let (node, _version) = Node::create_with_version(
             &pool,
-            NewNode {
-                title: "".into(),
-                ..Default::default()
+            CreateNodeWithVersion {
+                title: "Hello World".into(),
+                slug: Some("custom-slug".into()),
+                body: None,
             },
         )
-        .await;
-        assert!(result.is_err());
-        let errors = result.unwrap_err();
-        assert!(errors.get("title").unwrap().contains(&"can't be blank".to_string()));
+        .await
+        .unwrap();
+        assert_eq!(node.slug, "custom-slug");
     }
 
     #[tokio::test]
-    async fn enforces_max_title_length() {
+    async fn stores_body_on_version() {
         let pool = test_pool().await;
-        let result = Node::create(
+        let (_node, version) = Node::create_with_version(
             &pool,
-            NewNode {
-                title: "a".repeat(256),
-                ..Default::default()
+            CreateNodeWithVersion {
+                title: "Hello".into(),
+                slug: None,
+                body: Some("Some content".into()),
+            },
+        )
+        .await
+        .unwrap();
+        assert_eq!(version.body.as_deref(), Some("Some content"));
+    }
+
+    #[tokio::test]
+    async fn rejects_blank_title() {
+        let pool = test_pool().await;
+        let result = Node::create_with_version(
+            &pool,
+            CreateNodeWithVersion {
+                title: "".into(),
+                slug: None,
+                body: None,
             },
         )
         .await;
@@ -467,21 +500,38 @@ mod tests {
         assert!(errors
             .get("title")
             .unwrap()
-            .contains(&"is too long (maximum is 255 characters)".to_string()));
+            .contains(&"can't be blank".to_string()));
     }
 
     #[tokio::test]
-    async fn accepts_title_of_exactly_255_chars() {
+    async fn rejects_duplicate_slug() {
         let pool = test_pool().await;
-        let result = Node::create(
+        Node::create_with_version(
             &pool,
-            NewNode {
-                title: "a".repeat(255),
-                ..Default::default()
+            CreateNodeWithVersion {
+                title: "First".into(),
+                slug: Some("taken".into()),
+                body: None,
+            },
+        )
+        .await
+        .unwrap();
+
+        let result = Node::create_with_version(
+            &pool,
+            CreateNodeWithVersion {
+                title: "Second".into(),
+                slug: Some("taken".into()),
+                body: None,
             },
         )
         .await;
-        assert!(result.is_ok());
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .get("slug")
+            .unwrap()
+            .contains(&"has already been taken".to_string()));
     }
 
     #[tokio::test]
@@ -497,12 +547,12 @@ mod tests {
             "hello_world",
         ];
         for bad_slug in &invalid_slugs {
-            let result = Node::create(
+            let result = Node::create_with_version(
                 &pool,
-                NewNode {
+                CreateNodeWithVersion {
                     title: "Something".into(),
                     slug: Some(bad_slug.to_string()),
-                    ..Default::default()
+                    body: None,
                 },
             )
             .await;
@@ -514,14 +564,13 @@ mod tests {
     async fn accepts_valid_slug_formats() {
         let pool = test_pool().await;
         let valid_slugs = ["hello", "hello-world", "a1-b2-c3", "123"];
-        for (i, good_slug) in valid_slugs.iter().enumerate() {
-            let result = Node::create(
+        for good_slug in &valid_slugs {
+            let result = Node::create_with_version(
                 &pool,
-                NewNode {
-                    // Unique title per iteration to avoid slug conflicts
-                    title: format!("Title {i}"),
+                CreateNodeWithVersion {
+                    title: format!("Title for {good_slug}"),
                     slug: Some(good_slug.to_string()),
-                    ..Default::default()
+                    body: None,
                 },
             )
             .await;
@@ -530,231 +579,98 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn enforces_slug_uniqueness() {
-        let pool = test_pool().await;
-        Node::create(
-            &pool,
-            NewNode {
-                title: "First".into(),
-                slug: Some("my-slug".into()),
-                ..Default::default()
-            },
-        )
-        .await
-        .unwrap();
-
-        let result = Node::create(
-            &pool,
-            NewNode {
-                title: "Second".into(),
-                slug: Some("my-slug".into()),
-                ..Default::default()
-            },
-        )
-        .await;
-        assert!(result.is_err());
-        let errors = result.unwrap_err();
-        assert!(errors
-            .get("slug")
-            .unwrap()
-            .contains(&"has already been taken".to_string()));
-    }
-
-    #[tokio::test]
-    async fn enforces_max_slug_length() {
-        let pool = test_pool().await;
-        let result = Node::create(
-            &pool,
-            NewNode {
-                title: "Something".into(),
-                slug: Some("a".repeat(256)),
-                ..Default::default()
-            },
-        )
-        .await;
-        assert!(result.is_err());
-        let errors = result.unwrap_err();
-        assert!(errors
-            .get("slug")
-            .unwrap()
-            .contains(&"is too long (maximum is 255 characters)".to_string()));
-    }
-
-    #[tokio::test]
-    async fn preserves_explicit_slug() {
-        let pool = test_pool().await;
-        let node = Node::create(
-            &pool,
-            NewNode {
-                title: "My Title".into(),
-                slug: Some("custom-slug".into()),
-                ..Default::default()
-            },
-        )
-        .await
-        .unwrap();
-        assert_eq!(node.slug, "custom-slug");
-    }
-
-    #[tokio::test]
     async fn fails_when_title_produces_empty_slug() {
         let pool = test_pool().await;
-        let result = Node::create(
+        let result = Node::create_with_version(
             &pool,
-            NewNode {
+            CreateNodeWithVersion {
                 title: "!!!".into(),
-                ..Default::default()
+                slug: None,
+                body: None,
             },
         )
         .await;
         assert!(result.is_err());
-        let errors = result.unwrap_err();
-        assert!(errors.get("slug").unwrap().contains(&"can't be blank".to_string()));
+        assert!(result
+            .unwrap_err()
+            .get("slug")
+            .unwrap()
+            .contains(&"can't be blank".to_string()));
     }
 
-    #[tokio::test]
-    async fn does_not_overwrite_existing_slug() {
-        let pool = test_pool().await;
-        let node = Node::create(
-            &pool,
-            NewNode {
-                title: "New Title".into(),
-                slug: Some("keep-this".into()),
-                ..Default::default()
-            },
-        )
-        .await
-        .unwrap();
-        assert_eq!(node.slug, "keep-this");
-    }
-
-    // -- Published timestamp behaviour ---------------------------------------
+    // -- Version operations -------------------------------------------------
 
     #[tokio::test]
-    async fn sets_published_at_when_publishing() {
+    async fn current_for_returns_uncommitted_version() {
         let pool = test_pool().await;
-        let node = Node::create(
+        let (node, version) = Node::create_with_version(
             &pool,
-            NewNode {
+            CreateNodeWithVersion {
                 title: "Test".into(),
-                ..Default::default()
+                slug: None,
+                body: None,
             },
         )
         .await
         .unwrap();
-        assert!(node.published_at.is_none());
 
-        let updated = node
-            .update(
-                &pool,
-                UpdateNode {
-                    title: "Test".into(),
-                    slug: Some("test".into()),
-                    body: None,
-                    published: true,
-                },
-            )
+        let main = Branch::find_by_name(&pool, "main").await.unwrap().unwrap();
+        let current = Version::current_for(&pool, node.id, main.id)
             .await
+            .unwrap()
             .unwrap();
-        assert!(updated.published_at.is_some());
+        assert_eq!(current.id, version.id);
+        assert!(current.committed_at.is_none());
     }
 
     #[tokio::test]
-    async fn preserves_published_at_when_unpublishing() {
+    async fn commit_transitions_version() {
         let pool = test_pool().await;
-        let node = Node::create(
+        let (_node, version) = Node::create_with_version(
             &pool,
-            NewNode {
+            CreateNodeWithVersion {
                 title: "Test".into(),
-                published: true,
-                ..Default::default()
-            },
-        )
-        .await
-        .unwrap();
-        let original_time = node.published_at;
-        assert!(original_time.is_some());
-
-        let updated = node
-            .update(
-                &pool,
-                UpdateNode {
-                    title: "Test".into(),
-                    slug: Some("test".into()),
-                    body: None,
-                    published: false,
-                },
-            )
-            .await
-            .unwrap();
-        assert_eq!(updated.published_at, original_time);
-    }
-
-    #[tokio::test]
-    async fn does_not_set_published_at_when_stays_false() {
-        let pool = test_pool().await;
-        let node = Node::create(
-            &pool,
-            NewNode {
-                title: "Test".into(),
-                ..Default::default()
+                slug: None,
+                body: None,
             },
         )
         .await
         .unwrap();
 
-        let updated = node
-            .update(
-                &pool,
-                UpdateNode {
-                    title: "Updated Title".into(),
-                    slug: None,
-                    body: None,
-                    published: false,
-                },
-            )
-            .await
-            .unwrap();
-        assert!(updated.published_at.is_none());
+        let committed = version.commit(&pool, "Initial commit").await.unwrap();
+        assert!(committed.committed_at.is_some());
+        assert_eq!(committed.commit_message.as_deref(), Some("Initial commit"));
     }
 
     #[tokio::test]
-    async fn auto_manages_timestamps() {
+    async fn delete_cascades_to_versions() {
         let pool = test_pool().await;
-        let node = Node::create(
+        let (node, _version) = Node::create_with_version(
             &pool,
-            NewNode {
-                title: "Test".into(),
-                ..Default::default()
-            },
-        )
-        .await
-        .unwrap();
-        // created_at and updated_at should both be populated
-        assert!(node.created_at.and_utc().timestamp() > 0);
-        assert!(node.updated_at.and_utc().timestamp() > 0);
-    }
-
-    // -- Delete --------------------------------------------------------------
-
-    #[tokio::test]
-    async fn deletes_a_node() {
-        let pool = test_pool().await;
-        let node = Node::create(
-            &pool,
-            NewNode {
+            CreateNodeWithVersion {
                 title: "Doomed".into(),
-                ..Default::default()
+                slug: None,
+                body: None,
             },
         )
         .await
         .unwrap();
 
-        let deleted = Node::delete(&pool, node.id).await.unwrap();
-        assert!(deleted);
+        let count_before: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM versions")
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert_eq!(count_before, 1);
 
-        let found = Node::find(&pool, node.id).await.unwrap();
-        assert!(found.is_none());
+        Node::delete(&pool, node.id).await.unwrap();
+
+        let count_after: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM versions")
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert_eq!(count_after, 0);
     }
 
     #[tokio::test]

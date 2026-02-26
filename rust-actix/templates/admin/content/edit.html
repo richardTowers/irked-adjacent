@@ -1,9 +1,14 @@
 {% extends "base.html" %}
 
-{% block title %}New Node — CMS{% endblock %}
+{% block title %}Edit Node — CMS{% endblock %}
 
 {% block content %}
-<h1>New Node</h1>
+<h1>Edit Node</h1>
+
+<dl>
+  <dt>Slug</dt>
+  <dd>{{ node.slug }}</dd>
+</dl>
 
 {% if error_messages | length > 0 %}
   <div role="alert">
@@ -16,7 +21,9 @@
   </div>
 {% endif %}
 
-<form method="post" action="/admin/content">
+<form method="post" action="/admin/content/{{ node.id }}">
+  <input type="hidden" name="_method" value="patch">
+
   <div>
     <label for="node_title">Title</label>
     <input type="text" id="node_title" name="title" value="{{ version.title }}" required
@@ -27,22 +34,13 @@
   </div>
 
   <div>
-    <label for="node_slug">Slug</label>
-    <input type="text" id="node_slug" name="slug" value="{{ node.slug }}"
-      {% if errors.slug | length > 0 %} aria-invalid="true" aria-describedby="slug-error"{% endif %}>
-    {% if errors.slug | length > 0 %}
-      <span id="slug-error">{{ errors.slug | join(sep=", ") }}</span>
-    {% endif %}
-  </div>
-
-  <div>
     <label for="node_body">Body</label>
     <textarea id="node_body" name="body">{{ version.body }}</textarea>
   </div>
 
   <div>
-    <input type="submit" value="Create Node">
-    <a href="/admin/content">Cancel</a>
+    <input type="submit" value="Save Draft">
+    <a href="/admin/content/{{ node.id }}">Cancel</a>
   </div>
 </form>
 {% endblock %}

@@ -1,32 +1,45 @@
 {% extends "base.html" %}
 
-{% block title %}{{ node.title }} — CMS{% endblock %}
+{% block title %}{% if version %}{{ version.title }}{% else %}Node{% endif %} — CMS{% endblock %}
 
 {% block content %}
-<h1>{{ node.title }}</h1>
+<h1>{% if version %}{{ version.title }}{% endif %}</h1>
 
 <dl>
   <dt>Slug</dt>
   <dd>{{ node.slug }}</dd>
 
   <dt>Body</dt>
-  <dd>{{ node.body }}</dd>
+  <dd>{% if version %}{{ version.body }}{% endif %}</dd>
 
   <dt>Status</dt>
-  <dd>{% if node.published %}Published{% else %}Draft{% endif %}</dd>
+  {% if version and version.committed_at %}
+    <dd>Committed</dd>
 
-  <dt>Published At</dt>
-  <dd>{{ node.published_at }}</dd>
+    <dt>Commit Message</dt>
+    <dd>{{ version.commit_message }}</dd>
 
-  <dt>Created At</dt>
-  <dd>{{ node.created_at }}</dd>
-
-  <dt>Updated At</dt>
-  <dd>{{ node.updated_at }}</dd>
+    <dt>Committed At</dt>
+    <dd>{{ version.committed_at }}</dd>
+  {% else %}
+    <dd>Draft</dd>
+  {% endif %}
 </dl>
 
-<a href="/admin/content">Back to content</a>
-<a href="/admin/content/{{ node.id }}/edit">Edit</a>
+{% if version and version.is_uncommitted %}
+  <form method="post" action="/admin/content/{{ node.id }}/commit">
+    <div>
+      <label for="commit_message">Commit message</label>
+      <input type="text" name="commit_message" id="commit_message">
+    </div>
+    <div>
+      <input type="submit" value="Commit">
+    </div>
+  </form>
+{% endif %}
+
+<a href="/admin/content/{{ node.id }}/edit">Edit Node</a>
+<a href="/admin/content">Back to Nodes</a>
 <form method="post" action="/admin/content/{{ node.id }}" onsubmit="return confirm('Are you sure you want to delete this node? This action cannot be undone.');">
   <input type="hidden" name="_method" value="delete">
   <button type="submit">Delete Node</button>

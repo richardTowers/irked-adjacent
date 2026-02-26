@@ -17,6 +17,9 @@
         {% if flash_notice %}
             <p role="status">{{ flash_notice }}</p>
         {% endif %}
+        {% if flash_alert %}
+            <p role="alert">{{ flash_alert }}</p>
+        {% endif %}
         {% block content %}{% endblock %}
     </main>
 </body>
