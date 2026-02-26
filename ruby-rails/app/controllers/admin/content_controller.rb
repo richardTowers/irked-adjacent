@@ -4,6 +4,16 @@ module Admin
       @nodes = Node.order(updated_at: :desc)
       @main_branch = Branch.find_by!(name: "main")
       @published_branch = Branch.find_by!(name: "published")
+
+      @latest_committed = Version.committed
+                                 .where(branch: current_branch)
+                                 .order(committed_at: :asc)
+                                 .index_by(&:node_id)
+
+      @latest_published = Version.committed
+                                 .where(branch: @published_branch)
+                                 .order(committed_at: :asc)
+                                 .index_by(&:node_id)
     end
 
     def show

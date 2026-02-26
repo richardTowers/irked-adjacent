@@ -41,11 +41,11 @@ RSpec.describe "Admin::Content", type: :request do
         expect(response.body).to include("<th scope=\"col\">Title</th>")
         expect(response.body).to include("<th scope=\"col\">Slug</th>")
         expect(response.body).to include("<th scope=\"col\">Status</th>")
+        expect(response.body).to include("<th scope=\"col\">Committed</th>")
         expect(response.body).to include("<th scope=\"col\">Published</th>")
-        expect(response.body).to include("<th scope=\"col\">Updated</th>")
       end
 
-      it "displays the Published column correctly" do
+      it "displays the Published column with version ID and timestamp when published, dash when not" do
         # Publish the older_node
         committed_version = Version.committed.where(node: older_node, branch: main_branch).first
         Version.publish!(committed_version)
@@ -53,11 +53,30 @@ RSpec.describe "Admin::Content", type: :request do
         get "/admin/content"
 
         body = response.body
-        older_row = body[body.index("Older Post")..body.index("Older Post") + 300]
-        newer_row = body[body.index("Newer Post")..body.index("Newer Post") + 300]
+        older_row = body[body.index("Older Post")..body.index("Older Post") + 500]
+        newer_row = body[body.index("Newer Post")..body.index("Newer Post") + 500]
 
-        expect(older_row).to include(">Yes<")
-        expect(newer_row).to include(">No<")
+        # older_node is published — should show version ID and timestamp
+        published_version = Version.committed.where(node: older_node, branch: Branch.find_by!(name: "published")).last
+        expect(older_row).to include("#{published_version.id} (#{published_version.committed_at.strftime("%-d %B %Y %H:%M")})")
+
+        # newer_node is not published — should show a dash
+        expect(newer_row).to include("—")
+      end
+
+      it "displays the Committed column with version ID and timestamp when committed, dash when not" do
+        get "/admin/content"
+
+        body = response.body
+        older_row = body[body.index("Older Post")..body.index("Older Post") + 500]
+        newer_row = body[body.index("Newer Post")..body.index("Newer Post") + 500]
+
+        # older_node was committed — should show version ID and timestamp
+        committed_version = Version.committed.where(node: older_node, branch: main_branch).last
+        expect(older_row).to include("#{committed_version.id} (#{committed_version.committed_at.strftime("%-d %B %Y %H:%M")})")
+
+        # newer_node is still a draft — should show a dash
+        expect(newer_row).to include("—")
       end
 
       it "orders nodes by updated_at descending" do
