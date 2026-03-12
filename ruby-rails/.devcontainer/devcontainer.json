@@ -9,7 +9,7 @@
     "ghcr.io/anthropics/devcontainer-features/claude-code:1.0": {},
     "ghcr.io/rails/devcontainer/features/sqlite3": {},
     "ghcr.io/devcontainers/features/docker-in-docker:2": {
-      "moby": "true",
+      "moby": "false",
       "enableNonRootDocker": "true"
     }
   },
