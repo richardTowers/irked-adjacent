@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+COMPOSE_FILE="$(dirname "$0")/../.devcontainer/docker-compose.lgtm.yml"
+
+case "${1:-up}" in
+  up)
+    docker compose -f "$COMPOSE_FILE" up -d
+    echo "Grafana → http://localhost:3001  (admin/admin)"
+    echo "OTLP HTTP → http://localhost:4318"
+    ;;
+  down) docker compose -f "$COMPOSE_FILE" down ;;
+  logs) docker compose -f "$COMPOSE_FILE" logs -f ;;
+  *)    echo "Usage: bin/lgtm [up|down|logs]"; exit 1 ;;
+esac
