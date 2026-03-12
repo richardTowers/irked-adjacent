@@ -15,6 +15,15 @@ gem "solid_queue"
 # Solid Cache for DB-backed cache [https://github.com/rails/solid_cache]
 gem "solid_cache"
 
+# Observability
+gem "opentelemetry-sdk"
+gem "opentelemetry-exporter-otlp"
+gem "opentelemetry-instrumentation-all"
+gem "opentelemetry-metrics-sdk"
+gem "opentelemetry-exporter-otlp-metrics"
+gem "opentelemetry-logs-sdk"
+gem "opentelemetry-exporter-otlp-logs"
+
 # Windows does not include zoneinfo files, so bundle the tzinfo-data gem
 gem "tzinfo-data", platforms: %i[ windows jruby ]
 
