@@ -7,7 +7,19 @@
     "ghcr.io/tobiaschc/devcontainer-features/starship:1": {},
     "ghcr.io/devcontainers/features/node:1": {},
     "ghcr.io/anthropics/devcontainer-features/claude-code:1.0": {},
-    "ghcr.io/rails/devcontainer/features/sqlite3": {}
+    "ghcr.io/rails/devcontainer/features/sqlite3": {},
+    "ghcr.io/devcontainers/features/docker-in-docker:2": {
+      "moby": "true",
+      "enableNonRootDocker": "true"
+    }
+  },
+  "remoteEnv": {
+    "OTEL_SERVICE_NAME": "ruby-rails",
+    "OTEL_EXPORTER_OTLP_ENDPOINT": "http://localhost:4318",
+    "OTEL_RESOURCE_ATTRIBUTES": "deployment.environment=development",
+    "OTEL_ATTRIBUTE_VALUE_LENGTH_LIMIT": "512",
+    "OTEL_TRACES_SAMPLER": "parentbased_always_on",
+    "OTEL_LOG_LEVEL": "warn"
   },
   "customizations": {
     "jetbrains": {

@@ -1,0 +1,18 @@
+services:
+  lgtm:
+    image: grafana/otel-lgtm:0.8.1
+    ports:
+      - "3001:3000"   # Grafana (3000 is Rails)
+      - "4317:4317"   # OTLP gRPC
+      - "4318:4318"   # OTLP HTTP
+      - "3100:3100"   # Loki
+      - "9090:9090"   # Mimir/Prometheus
+    volumes:
+      - lgtm-data:/data
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    restart: unless-stopped
+
+volumes:
+  lgtm-data:
