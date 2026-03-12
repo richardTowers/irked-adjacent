@@ -2,11 +2,11 @@
 
 class OtlpEventSubscriber
   def emit(event)
-    logger_provider = OpenTelemetry::Logs::SDK.logger_provider
+    logger_provider = OpenTelemetry.logger_provider
     logger = logger_provider.logger(name: "rails.event", version: Rails.version)
 
     logger.on_emit(
-      severity_number: OpenTelemetry::Logs::SeverityNumber::INFO,
+      severity_number: OpenTelemetry::Logs::SeverityNumber::SEVERITY_NUMBER_INFO,
       severity_text: "INFO",
       timestamp: Time.at(0, event[:timestamp], :nanosecond),
       body: event[:name],
