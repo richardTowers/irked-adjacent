@@ -38,5 +38,9 @@ module RubyRails
 
     # Don't generate system test files.
     config.generators.system_tests = nil
+
+    # Point Solid Cache and Solid Queue at their dedicated databases.
+    config.solid_cache.connects_to = { database: { writing: :cache } }
+    config.solid_queue.connects_to = { database: { writing: :queue } }
   end
 end
