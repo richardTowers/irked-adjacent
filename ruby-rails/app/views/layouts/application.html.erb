@@ -29,6 +29,9 @@
     <header>
       <nav>
         <%= link_to "Content", "/admin/content" %>
+        <% if authenticated? %>
+          <%= button_to "Sign out", session_path, method: :delete %>
+        <% end %>
       </nav>
     </header>
 

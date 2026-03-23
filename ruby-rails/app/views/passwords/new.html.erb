@@ -1,0 +1,16 @@
+<h1>Forgot your password?</h1>
+
+<% if flash[:alert] %>
+  <p role="alert"><%= flash[:alert] %></p>
+<% end %>
+
+<%= form_with url: passwords_path do |form| %>
+  <div>
+    <%= form.label :email_address, "Email address" %>
+    <%= form.email_field :email_address, required: true, autofocus: true, autocomplete: "username", value: params[:email_address] %>
+  </div>
+
+  <div>
+    <%= form.submit "Email reset instructions" %>
+  </div>
+<% end %>
