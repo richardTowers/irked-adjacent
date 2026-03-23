@@ -33,6 +33,7 @@ Rails.application.configure do
 
   # Action Mailer defaults for development.
   config.action_mailer.default_url_options = { host: "localhost", port: 3000 }
+  config.action_mailer.delivery_method = :file
 
   # Print deprecation notices to the Rails logger.
   config.active_support.deprecation = :log
