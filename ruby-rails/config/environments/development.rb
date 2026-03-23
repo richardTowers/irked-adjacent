@@ -31,6 +31,10 @@ Rails.application.configure do
   # Use Solid Queue as the Active Job backend.
   config.active_job.queue_adapter = :solid_queue
 
+  # Action Mailer defaults for development.
+  config.action_mailer.default_url_options = { host: "localhost", port: 3000 }
+  config.action_mailer.delivery_method = :file
+
   # Print deprecation notices to the Rails logger.
   config.active_support.deprecation = :log
 

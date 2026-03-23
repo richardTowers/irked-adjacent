@@ -1,0 +1,47 @@
+<h1>Sign up</h1>
+
+<% if @user.errors.any? %>
+  <div role="alert">
+    <h2><%= pluralize(@user.errors.count, "error") %> prohibited this account from being created:</h2>
+    <ul>
+      <% @user.errors.full_messages.each do |message| %>
+        <li><%= message %></li>
+      <% end %>
+    </ul>
+  </div>
+<% end %>
+
+<%= form_with model: @user, url: registration_path do |form| %>
+  <div>
+    <%= form.label :email_address, "Email address" %>
+    <%= form.email_field :email_address, required: true, autofocus: true, autocomplete: "email",
+          **(@user.errors[:email_address].any? ? { "aria-invalid": "true", "aria-describedby": "email-error" } : {}) %>
+    <% if @user.errors[:email_address].any? %>
+      <span id="email-error"><%= @user.errors[:email_address].join(", ") %></span>
+    <% end %>
+  </div>
+
+  <div>
+    <%= form.label :password %>
+    <%= form.password_field :password, required: true, autocomplete: "new-password", maxlength: 72,
+          **(@user.errors[:password].any? ? { "aria-invalid": "true", "aria-describedby": "password-error" } : {}) %>
+    <% if @user.errors[:password].any? %>
+      <span id="password-error"><%= @user.errors[:password].join(", ") %></span>
+    <% end %>
+  </div>
+
+  <div>
+    <%= form.label :password_confirmation, "Confirm password" %>
+    <%= form.password_field :password_confirmation, required: true, autocomplete: "new-password", maxlength: 72,
+          **(@user.errors[:password_confirmation].any? ? { "aria-invalid": "true", "aria-describedby": "password-confirmation-error" } : {}) %>
+    <% if @user.errors[:password_confirmation].any? %>
+      <span id="password-confirmation-error"><%= @user.errors[:password_confirmation].join(", ") %></span>
+    <% end %>
+  </div>
+
+  <div>
+    <%= form.submit "Sign up" %>
+  </div>
+<% end %>
+
+<p>Already have an account? <%= link_to "Sign in", new_session_path %></p>

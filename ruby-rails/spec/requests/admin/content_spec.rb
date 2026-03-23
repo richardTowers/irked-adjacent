@@ -1,6 +1,8 @@
 require "rails_helper"
 
 RSpec.describe "Admin::Content", type: :request do
+  before { create_and_sign_in_user }
+
   describe "GET /admin/content" do
     context "when there are no nodes" do
       it "returns 200 and shows the empty state" do
