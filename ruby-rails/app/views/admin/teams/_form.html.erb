@@ -1,0 +1,36 @@
+<% if @team.errors.any? %>
+  <div role="alert">
+    <h2><%= pluralize(@team.errors.count, "error") %> prohibited this team from being saved:</h2>
+    <ul>
+      <% @team.errors.full_messages.each do |message| %>
+        <li><%= message %></li>
+      <% end %>
+    </ul>
+  </div>
+<% end %>
+
+<%= form_with(model: @team, url: url) do |form| %>
+  <div>
+    <%= form.label :name %>
+    <%= form.text_field :name,
+          required: true,
+          **(@team.errors[:name].any? ? { "aria-invalid": "true", "aria-describedby": "name-error" } : {}) %>
+    <% if @team.errors[:name].any? %>
+      <span id="name-error"><%= @team.errors[:name].join(", ") %></span>
+    <% end %>
+  </div>
+
+  <div>
+    <%= form.label :slug %>
+    <%= form.text_field :slug,
+          **(@team.errors[:slug].any? ? { "aria-invalid": "true", "aria-describedby": "slug-error" } : {}) %>
+    <% if @team.errors[:slug].any? %>
+      <span id="slug-error"><%= @team.errors[:slug].join(", ") %></span>
+    <% end %>
+  </div>
+
+  <div>
+    <%= form.submit submit_label %>
+    <%= link_to "Cancel", cancel_path %>
+  </div>
+<% end %>

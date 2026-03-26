@@ -1,0 +1,26 @@
+<h1>Your Teams</h1>
+
+<%= link_to "New Team", new_admin_team_path %>
+
+<% if @teams.empty? %>
+  <p>You are not a member of any teams yet. <%= link_to "Create one", new_admin_team_path %>.</p>
+<% else %>
+  <table>
+    <thead>
+      <tr>
+        <th scope="col">Name</th>
+        <th scope="col">Members</th>
+        <th scope="col">Nodes</th>
+      </tr>
+    </thead>
+    <tbody>
+      <% @teams.each do |team| %>
+        <tr>
+          <td><%= link_to team.name, admin_team_path(team) %></td>
+          <td><%= team.users.count %></td>
+          <td><%= team.nodes.count %></td>
+        </tr>
+      <% end %>
+    </tbody>
+  </table>
+<% end %>

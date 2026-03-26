@@ -16,6 +16,9 @@ Rails.application.routes.draw do
 
   namespace :admin do
     resources :content, only: [:index, :show, :new, :create, :edit, :update, :destroy], controller: "content", constraints: { id: /\d+/ }
+    resources :teams do
+      resources :members, only: [:create, :destroy], module: :teams
+    end
   end
 
   root to: redirect("/admin/content")
