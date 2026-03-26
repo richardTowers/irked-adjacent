@@ -407,13 +407,19 @@ RSpec.describe "Admin::Content", type: :request do
       expect(response.body).to include("editable-node")
     end
 
-    it "has form fields for title, slug, content_type, and published" do
+    it "has form fields for title, slug, and published" do
       get "/admin/content/#{node.id}/edit"
 
       expect(response.body).to include("node[title]")
       expect(response.body).to include("node[slug]")
-      expect(response.body).to include("node[content_type_id]")
       expect(response.body).to include("node[published]")
+    end
+
+    it "displays the content type name as read-only" do
+      get "/admin/content/#{node.id}/edit"
+
+      expect(response.body).to include("Page")
+      expect(response.body).not_to include("node[content_type_id]")
     end
 
     it "has a submit button labeled 'Update Node'" do
@@ -618,6 +624,393 @@ RSpec.describe "Admin::Content", type: :request do
         }.not_to change(Node, :count)
 
         expect(response).to have_http_status(:not_found)
+      end
+    end
+  end
+
+  describe "dynamic node forms" do
+    let(:event_type) do
+      ContentType.create!(name: "Event", team: team)
+    end
+
+    let!(:string_field) do
+      event_type.field_definitions.create!(
+        name: "Venue", api_key: "venue", field_type: "string", required: true, position: 0
+      )
+    end
+
+    let!(:text_field) do
+      event_type.field_definitions.create!(
+        name: "Description", api_key: "description", field_type: "text", required: false, position: 1
+      )
+    end
+
+    let!(:integer_field) do
+      event_type.field_definitions.create!(
+        name: "Capacity", api_key: "capacity", field_type: "integer", required: false, position: 2
+      )
+    end
+
+    let!(:decimal_field) do
+      event_type.field_definitions.create!(
+        name: "Price", api_key: "price", field_type: "decimal", required: false, position: 3
+      )
+    end
+
+    let!(:boolean_field) do
+      event_type.field_definitions.create!(
+        name: "Featured", api_key: "is_featured", field_type: "boolean", required: false, position: 4
+      )
+    end
+
+    let!(:date_field) do
+      event_type.field_definitions.create!(
+        name: "Event Date", api_key: "event_date", field_type: "date", required: true, position: 5
+      )
+    end
+
+    let!(:datetime_field) do
+      event_type.field_definitions.create!(
+        name: "Registration Deadline", api_key: "registration_deadline", field_type: "datetime", required: false, position: 6
+      )
+    end
+
+    describe "GET /admin/content/new with content_type_id" do
+      it "shows a content type selector" do
+        get "/admin/content/new"
+
+        expect(response.body).to include("Content type")
+        expect(response.body).to include("content_type_id")
+      end
+
+      it "renders fields for the selected content type" do
+        get "/admin/content/new", params: { content_type_id: event_type.id }
+
+        expect(response).to have_http_status(:ok)
+        expect(response.body).to include("node[fields][venue]")
+        expect(response.body).to include("node[fields][description]")
+        expect(response.body).to include("node[fields][capacity]")
+        expect(response.body).to include("node[fields][price]")
+        expect(response.body).to include("node[fields][is_featured]")
+        expect(response.body).to include("node[fields][event_date]")
+        expect(response.body).to include("node[fields][registration_deadline]")
+      end
+
+      it "renders the correct input types" do
+        get "/admin/content/new", params: { content_type_id: event_type.id }
+
+        # String field -> text input
+        expect(response.body).to match(/type="text"[^>]*name="node\[fields\]\[venue\]"/)
+        # Integer field -> number input with step=1
+        expect(response.body).to match(/type="number"[^>]*name="node\[fields\]\[capacity\]"[^>]*step="1"/)
+        # Decimal field -> number input with step=any
+        expect(response.body).to match(/type="number"[^>]*name="node\[fields\]\[price\]"[^>]*step="any"/)
+        # Boolean field -> checkbox
+        expect(response.body).to match(/type="checkbox"[^>]*name="node\[fields\]\[is_featured\]"/)
+        # Date field -> date input
+        expect(response.body).to match(/type="date"[^>]*name="node\[fields\]\[event_date\]"/)
+        # Datetime field -> datetime-local input
+        expect(response.body).to match(/type="datetime-local"[^>]*name="node\[fields\]\[registration_deadline\]"/)
+      end
+
+      it "renders text fields as textareas" do
+        get "/admin/content/new", params: { content_type_id: event_type.id }
+
+        expect(response.body).to match(/<textarea[^>]*name="node\[fields\]\[description\]"/)
+      end
+
+      it "marks required fields with aria-required and visual indicator" do
+        get "/admin/content/new", params: { content_type_id: event_type.id }
+
+        # Attributes may appear in any order
+        expect(response.body).to include('aria-required="true"')
+        expect(response.body).to include('name="node[fields][venue]"')
+        expect(response.body).to include('<abbr title="required">*</abbr>')
+      end
+
+      it "renders fields in position order" do
+        get "/admin/content/new", params: { content_type_id: event_type.id }
+
+        venue_pos = response.body.index("node[fields][venue]")
+        description_pos = response.body.index("node[fields][description]")
+        capacity_pos = response.body.index("node[fields][capacity]")
+        expect(venue_pos).to be < description_pos
+        expect(description_pos).to be < capacity_pos
+      end
+
+      it "renders universal fields above content-type fields" do
+        get "/admin/content/new", params: { content_type_id: event_type.id }
+
+        title_pos = response.body.index("node[title]")
+        venue_pos = response.body.index("node[fields][venue]")
+        expect(title_pos).to be < venue_pos
+      end
+
+      it "wraps dynamic fields in a fieldset with legend" do
+        get "/admin/content/new", params: { content_type_id: event_type.id }
+
+        expect(response.body).to include("<fieldset>")
+        expect(response.body).to include("<legend>Fields</legend>")
+      end
+
+      it "has labels with for attributes matching input ids" do
+        get "/admin/content/new", params: { content_type_id: event_type.id }
+
+        expect(response.body).to include('for="node_fields_venue"')
+        expect(response.body).to include('id="node_fields_venue"')
+      end
+
+      it "pre-selects the content type when the team has only one" do
+        # Remove the default "Page" content type, keep only event_type
+        content_type.destroy!
+        get "/admin/content/new"
+
+        expect(response.body).to include("node[fields][venue]")
+      end
+
+      it "does not render fields when no content type is selected and multiple types exist" do
+        # With multiple content types, none is auto-selected
+        content_type # ensure the "Page" type also exists
+        get "/admin/content/new"
+
+        expect(response.body).not_to include("node[fields]")
+        expect(response.body).not_to include("<fieldset>")
+      end
+    end
+
+    describe "POST /admin/content with dynamic fields" do
+      it "creates a node with field values" do
+        expect {
+          post "/admin/content", params: {
+            node: {
+              title: "Tech Conference",
+              team_id: team.id,
+              content_type_id: event_type.id,
+              fields: {
+                venue: "Convention Center",
+                description: "A great event",
+                capacity: "500",
+                price: "29.99",
+                is_featured: "true",
+                event_date: "2026-06-15",
+                registration_deadline: "2026-06-01T09:00:00"
+              }
+            }
+          }
+        }.to change(Node, :count).by(1)
+
+        node = Node.last
+        expect(node.fields["venue"]).to eq("Convention Center")
+        expect(node.fields["capacity"]).to eq(500)
+        expect(node.fields["price"]).to eq(29.99)
+        expect(node.fields["is_featured"]).to eq(true)
+        expect(node.fields["event_date"]).to eq("2026-06-15")
+      end
+
+      it "defaults boolean fields to false when unchecked" do
+        post "/admin/content", params: {
+          node: {
+            title: "Simple Event",
+            team_id: team.id,
+            content_type_id: event_type.id,
+            fields: {
+              venue: "Park",
+              is_featured: "false",
+              event_date: "2026-07-01"
+            }
+          }
+        }
+
+        node = Node.last
+        expect(node.fields["is_featured"]).to eq(false)
+      end
+
+      it "casts integer and decimal fields from string params" do
+        post "/admin/content", params: {
+          node: {
+            title: "Typed Event",
+            team_id: team.id,
+            content_type_id: event_type.id,
+            fields: {
+              venue: "Hall",
+              capacity: "100",
+              price: "9.50",
+              event_date: "2026-08-01"
+            }
+          }
+        }
+
+        node = Node.last
+        expect(node.fields["capacity"]).to be_an(Integer)
+        expect(node.fields["price"]).to be_a(Float)
+      end
+
+      it "rejects unknown field keys" do
+        post "/admin/content", params: {
+          node: {
+            title: "Sneaky Event",
+            team_id: team.id,
+            content_type_id: event_type.id,
+            fields: {
+              venue: "Hall",
+              event_date: "2026-09-01",
+              hacked_field: "gotcha"
+            }
+          }
+        }
+
+        # The unknown key should be stripped by strong params
+        expect(Node.last).to be_present
+        expect(Node.last.fields).not_to have_key("hacked_field")
+      end
+
+      it "shows validation errors next to the correct fields" do
+        post "/admin/content", params: {
+          node: {
+            title: "Bad Event",
+            team_id: team.id,
+            content_type_id: event_type.id,
+            fields: {
+              venue: "",
+              event_date: ""
+            }
+          }
+        }
+
+        expect(response).to have_http_status(:unprocessable_entity)
+        expect(response.body).to include('aria-invalid="true"')
+        expect(response.body).to include("fields-venue-error")
+        expect(response.body).to include("aria-describedby")
+      end
+    end
+
+    describe "GET /admin/content/:id/edit with dynamic fields" do
+      let!(:event_node) do
+        Node.create!(
+          title: "Existing Event",
+          team: team,
+          content_type: event_type,
+          fields: {
+            "venue" => "Old Venue",
+            "description" => "Old description",
+            "capacity" => 200,
+            "price" => 15.50,
+            "is_featured" => true,
+            "event_date" => "2026-05-01"
+          }
+        )
+      end
+
+      it "renders fields with current values" do
+        get "/admin/content/#{event_node.id}/edit"
+
+        expect(response).to have_http_status(:ok)
+        expect(response.body).to include("Old Venue")
+        expect(response.body).to include("Old description")
+        expect(response.body).to include("200")
+        expect(response.body).to include("15.5")
+        expect(response.body).to include("2026-05-01")
+      end
+
+      it "checks the boolean checkbox when the value is true" do
+        get "/admin/content/#{event_node.id}/edit"
+
+        # Checkbox with checked attribute and correct name (attributes may be in any order)
+        expect(response.body).to include('checked="checked"')
+        expect(response.body).to include('name="node[fields][is_featured]"')
+      end
+
+      it "shows content type name as read-only" do
+        get "/admin/content/#{event_node.id}/edit"
+
+        expect(response.body).to include("Event")
+        expect(response.body).not_to include('name="node[content_type_id]"')
+      end
+    end
+
+    describe "PATCH /admin/content/:id with dynamic fields" do
+      let!(:event_node) do
+        Node.create!(
+          title: "Existing Event",
+          team: team,
+          content_type: event_type,
+          fields: {
+            "venue" => "Old Venue",
+            "is_featured" => true,
+            "event_date" => "2026-05-01"
+          }
+        )
+      end
+
+      it "updates field values" do
+        patch "/admin/content/#{event_node.id}", params: {
+          node: {
+            fields: {
+              venue: "New Venue",
+              is_featured: "false",
+              event_date: "2026-06-01"
+            }
+          }
+        }
+
+        expect(response).to redirect_to(admin_content_path(event_node))
+        event_node.reload
+        expect(event_node.fields["venue"]).to eq("New Venue")
+        expect(event_node.fields["is_featured"]).to eq(false)
+        expect(event_node.fields["event_date"]).to eq("2026-06-01")
+      end
+
+      it "shows validation errors on update" do
+        patch "/admin/content/#{event_node.id}", params: {
+          node: {
+            fields: {
+              venue: "",
+              event_date: ""
+            }
+          }
+        }
+
+        expect(response).to have_http_status(:unprocessable_entity)
+        expect(response.body).to include("fields-venue-error")
+      end
+    end
+
+    describe "reference fields" do
+      let(:article_type) { ContentType.create!(name: "Article", team: team) }
+      let!(:article_ref_field) do
+        article_type.field_definitions.create!(
+          name: "Related Article", api_key: "related_article", field_type: "reference",
+          required: false, position: 0,
+          validations: { "allowed_content_types" => [article_type.id] }
+        )
+      end
+
+      let!(:article_node) do
+        Node.create!(title: "First Article", team: team, content_type: article_type)
+      end
+
+      let!(:event_node) do
+        Node.create!(title: "Some Event", team: team, content_type: event_type,
+          fields: { "venue" => "Hall", "event_date" => "2026-01-01" })
+      end
+
+      it "shows eligible nodes in the reference dropdown" do
+        get "/admin/content/new", params: { content_type_id: article_type.id }
+
+        expect(response.body).to include("First Article (Article)")
+      end
+
+      it "filters by allowed_content_types" do
+        get "/admin/content/new", params: { content_type_id: article_type.id }
+
+        # The event node should not appear since allowed_content_types only includes article_type
+        expect(response.body).not_to include("Some Event (Event)")
+      end
+
+      it "renders reference field as a select" do
+        get "/admin/content/new", params: { content_type_id: article_type.id }
+
+        expect(response.body).to match(/<select[^>]*name="node\[fields\]\[related_article\]"/)
       end
     end
   end

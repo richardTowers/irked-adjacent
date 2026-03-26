@@ -1,3 +1,8 @@
+<% if local_assigns[:show_team_selector] %>
+  <%# Separate form for no-JS content type selection (must be OUTSIDE the main form to avoid nested forms) %>
+  <form action="<%= new_admin_content_path %>" method="get" id="content-type-selector"></form>
+<% end %>
+
 <% if @node.errors.any? %>
   <div role="alert">
     <h2><%= pluralize(@node.errors.count, "error") %> prohibited this node from being saved:</h2>
@@ -22,16 +27,45 @@
     </div>
   <% end %>
 
-  <div>
-    <%= form.label :content_type_id, "Content Type" %>
-    <% content_types = local_assigns[:show_team_selector] ? ContentType.where(team: @user_teams) : ContentType.where(team_id: @node.team_id) %>
-    <%= form.collection_select :content_type_id, content_types.order(:name), :id, :name,
-          { prompt: "Select a content type" },
-          **(@node.errors[:content_type_id].any? ? { "aria-invalid": "true", "aria-describedby": "content-type-id-error" } : {}) %>
-    <% if @node.errors[:content_type_id].any? %>
-      <span id="content-type-id-error"><%= @node.errors[:content_type_id].join(", ") %></span>
-    <% end %>
-  </div>
+  <% if local_assigns[:show_team_selector] %>
+    <%# New node: content type selector with no-JS reload %>
+    <div>
+      <%= label_tag :content_type_id, "Content type" %>
+      <% content_types = ContentType.where(team: @user_teams).order(:name) %>
+      <%# This select is inside the main form for display; a duplicate targets the external form for no-JS %>
+      <%= select_tag :content_type_id,
+            options_from_collection_for_select(content_types, :id, :name, @node.content_type_id),
+            prompt: "Select a content type",
+            id: "content_type_id" %>
+      <noscript>
+        <%# Duplicate select associated with the external GET form for no-JS content type switching %>
+        <select name="content_type_id" form="content-type-selector" aria-label="Content type">
+          <option value="">Select a content type</option>
+          <% content_types.each do |ct| %>
+            <option value="<%= ct.id %>" <%= "selected" if ct.id == @node.content_type_id %>><%= ct.name %></option>
+          <% end %>
+        </select>
+        <button type="submit" form="content-type-selector">Load fields</button>
+      </noscript>
+    </div>
+
+    <%# Auto-reload with JS when content type changes %>
+    <script>
+      document.getElementById("content_type_id").addEventListener("change", function() {
+        var ctId = this.value;
+        if (ctId) {
+          window.location.href = "<%= new_admin_content_path %>" + "?content_type_id=" + encodeURIComponent(ctId);
+        }
+      });
+    </script>
+
+    <%= form.hidden_field :content_type_id %>
+  <% else %>
+    <%# Edit node: show content type name, not editable %>
+    <div>
+      <strong>Content type:</strong> <span><%= @node.content_type&.name %></span>
+    </div>
+  <% end %>
 
   <div>
     <%= form.label :title %>
@@ -56,6 +90,15 @@
     <%= form.check_box :published %>
     <%= form.label :published %>
   </div>
+
+  <% if @field_definitions.present? %>
+    <fieldset>
+      <legend>Fields</legend>
+      <% @field_definitions.each do |field_def| %>
+        <%= render "admin/content/dynamic_field", form: form, field_def: field_def, node: @node, reference_nodes: @reference_nodes %>
+      <% end %>
+    </fieldset>
+  <% end %>
 
   <div>
     <%= form.submit submit_label %>

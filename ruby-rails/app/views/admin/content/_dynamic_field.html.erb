@@ -1,0 +1,81 @@
+<%# Renders a single dynamic field input based on its field_definition %>
+<%# Locals: form, field_def, node, reference_nodes %>
+<% api_key = field_def.api_key %>
+<% field_id = "node_fields_#{api_key}" %>
+<% error_id = "fields-#{api_key.dasherize}-error" %>
+<% has_errors = node.errors["fields.#{api_key}"].any? %>
+<% current_value = node.fields[api_key] %>
+<% error_attrs = has_errors ? { "aria-invalid": "true", "aria-describedby": error_id } : {} %>
+<% required_attrs = field_def.required? ? { "aria-required": "true", required: true } : {} %>
+
+<div>
+  <% if field_def.field_type == "boolean" %>
+    <%= hidden_field_tag "node[fields][#{api_key}]", "false", id: nil %>
+    <%= check_box_tag "node[fields][#{api_key}]", "true", current_value == true,
+          id: field_id,
+          **error_attrs %>
+    <%= label_tag field_id, field_def.name %>
+  <% else %>
+    <%= label_tag field_id do %>
+      <%= field_def.name %>
+      <% if field_def.required? %>
+        <abbr title="required">*</abbr>
+      <% end %>
+    <% end %>
+
+    <% case field_def.field_type %>
+    <% when "string" %>
+      <%= text_field_tag "node[fields][#{api_key}]", current_value,
+            id: field_id,
+            **error_attrs,
+            **required_attrs %>
+    <% when "text", "rich_text" %>
+      <%= text_area_tag "node[fields][#{api_key}]", current_value,
+            id: field_id,
+            **error_attrs,
+            **required_attrs %>
+    <% when "integer" %>
+      <%= number_field_tag "node[fields][#{api_key}]", current_value,
+            id: field_id,
+            step: 1,
+            **error_attrs,
+            **required_attrs %>
+    <% when "decimal" %>
+      <%= number_field_tag "node[fields][#{api_key}]", current_value,
+            id: field_id,
+            step: "any",
+            **error_attrs,
+            **required_attrs %>
+    <% when "date" %>
+      <%= date_field_tag "node[fields][#{api_key}]", current_value,
+            id: field_id,
+            **error_attrs,
+            **required_attrs %>
+    <% when "datetime" %>
+      <%= datetime_local_field_tag "node[fields][#{api_key}]", current_value,
+            id: field_id,
+            **error_attrs,
+            **required_attrs %>
+    <% when "reference" %>
+      <%
+        allowed_types = field_def.validations&.dig("allowed_content_types")
+        eligible_nodes = reference_nodes
+        if allowed_types.present?
+          eligible_nodes = eligible_nodes.where(content_type_id: allowed_types)
+        end
+      %>
+      <%= select_tag "node[fields][#{api_key}]",
+            options_for_select(
+              [["", ""]] + eligible_nodes.map { |n| ["#{n.title} (#{n.content_type&.name})", n.id] },
+              current_value
+            ),
+            id: field_id,
+            **error_attrs,
+            **required_attrs %>
+    <% end %>
+  <% end %>
+
+  <% if has_errors %>
+    <span id="<%= error_id %>"><%= node.errors["fields.#{api_key}"].join(", ") %></span>
+  <% end %>
+</div>
