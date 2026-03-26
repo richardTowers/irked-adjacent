@@ -5,7 +5,7 @@ RSpec.describe "Admin::ContentTypes", type: :request do
   let(:team) { Team.create!(name: "Test Team") }
 
   before do
-    Membership.create!(user: user, team: team)
+    Membership.create!(user: user, team: team, role: "editor")
   end
 
   describe "GET /admin/content-types" do
@@ -239,12 +239,11 @@ RSpec.describe "Admin::ContentTypes", type: :request do
         Membership.where(user: user).destroy_all
       end
 
-      it "shows a message instead of the form" do
+      it "returns 403 forbidden" do
         get "/admin/content-types/new"
 
-        expect(response).to have_http_status(:ok)
-        expect(response.body).to include("You need to be a member of a team before you can create content types.")
-        expect(response.body).not_to include("content_type[name]")
+        expect(response).to have_http_status(:forbidden)
+        expect(response.body).to include("Access Denied")
       end
     end
   end
@@ -510,6 +509,110 @@ RSpec.describe "Admin::ContentTypes", type: :request do
 
       expect(response.body).to include("Content Types")
       expect(response.body).to include("href=\"/admin/content-types\"")
+    end
+  end
+
+  describe "editor role authorization" do
+    let(:member_user) { create_and_sign_in_user(email: "member@example.com") }
+    let!(:content_type) { ContentType.create!(name: "Blog Post", team: team) }
+
+    before do
+      Membership.create!(user: member_user, team: team, role: "member")
+    end
+
+    context "as a member" do
+      it "can view the content types index" do
+        get "/admin/content-types"
+
+        expect(response).to have_http_status(:ok)
+        expect(response.body).to include("Blog Post")
+      end
+
+      it "can view a content type show page" do
+        get "/admin/content-types/blog-post"
+
+        expect(response).to have_http_status(:ok)
+        expect(response.body).to include("Blog Post")
+      end
+
+      it "does not see the New content type link on the index page" do
+        get "/admin/content-types"
+
+        expect(response.body).not_to include("New content type")
+      end
+
+      it "does not see the Edit link on the show page" do
+        get "/admin/content-types/blog-post"
+
+        expect(response.body).not_to include(">Edit</a>")
+      end
+
+      it "does not see the Delete button on the show page" do
+        get "/admin/content-types/blog-post"
+
+        expect(response.body).not_to include("Delete content type")
+      end
+
+      it "does not see the Add Field form on the show page" do
+        get "/admin/content-types/blog-post"
+
+        expect(response.body).not_to include("Add Field")
+      end
+
+      it "receives 403 when trying to access the new content type page" do
+        get "/admin/content-types/new"
+
+        expect(response).to have_http_status(:forbidden)
+        expect(response.body).to include("Access Denied")
+      end
+
+      it "receives 403 when trying to create a content type" do
+        expect {
+          post "/admin/content-types", params: { content_type: { name: "Sneaky", team_id: team.id } }
+        }.not_to change(ContentType, :count)
+
+        expect(response).to have_http_status(:forbidden)
+      end
+
+      it "receives 403 when trying to edit a content type" do
+        get "/admin/content-types/blog-post/edit"
+
+        expect(response).to have_http_status(:forbidden)
+      end
+
+      it "receives 403 when trying to update a content type" do
+        patch "/admin/content-types/blog-post", params: { content_type: { name: "Updated" } }
+
+        expect(response).to have_http_status(:forbidden)
+        expect(content_type.reload.name).to eq("Blog Post")
+      end
+
+      it "receives 403 when trying to delete a content type" do
+        delete "/admin/content-types/blog-post"
+
+        expect(response).to have_http_status(:forbidden)
+        expect(ContentType.exists?(content_type.id)).to be true
+      end
+    end
+
+    context "with editor role in a different team" do
+      let(:other_team) { Team.create!(name: "Other Team") }
+
+      before do
+        Membership.create!(user: member_user, team: other_team, role: "editor")
+      end
+
+      it "receives 403 when trying to edit a content type in the non-editor team" do
+        get "/admin/content-types/blog-post/edit"
+
+        expect(response).to have_http_status(:forbidden)
+      end
+
+      it "receives 403 when trying to delete a content type in the non-editor team" do
+        delete "/admin/content-types/blog-post"
+
+        expect(response).to have_http_status(:forbidden)
+      end
     end
   end
 end

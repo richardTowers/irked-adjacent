@@ -1,5 +1,5 @@
 class Membership < ApplicationRecord
-  ROLES = %w[member].freeze
+  ROLES = %w[member editor].freeze
 
   belongs_to :user
   belongs_to :team

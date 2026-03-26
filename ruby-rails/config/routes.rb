@@ -20,7 +20,7 @@ Rails.application.routes.draw do
       resources :fields, only: [:create, :update, :destroy], controller: "field_definitions"
     end
     resources :teams do
-      resources :members, only: [:create, :destroy], module: :teams
+      resources :members, only: [:create, :update, :destroy], module: :teams
     end
   end
 

@@ -3,6 +3,7 @@ module Admin
     before_action :set_user_teams
     before_action :set_content_type
     before_action :set_field_definition, only: %i[update destroy]
+    before_action :require_editor_role
 
     def create
       @field_definition = @content_type.field_definitions.build(field_definition_params)
@@ -45,6 +46,10 @@ module Admin
 
     def field_definition_params
       params.require(:field_definition).permit(:name, :api_key, :field_type, :required, :position)
+    end
+
+    def require_editor_role
+      render_forbidden unless Current.user.editor_for?(@content_type.team)
     end
   end
 end

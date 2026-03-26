@@ -13,6 +13,10 @@ class ApplicationController < ActionController::Base
     render plain: "Not Found", status: :not_found
   end
 
+  def render_forbidden
+    render "errors/forbidden", status: :forbidden, layout: "application"
+  end
+
   def set_event_context
     trace_id = if defined?(OpenTelemetry)
       span = OpenTelemetry::Trace.current_span

@@ -11,8 +11,20 @@ module Admin
         elsif @team.users.include?(user)
           redirect_to admin_team_path(@team), alert: "That user is already a member of this team."
         else
-          @team.memberships.create!(user: user, role: "member")
+          role = params[:role].presence_in(Membership::ROLES) || "member"
+          @team.memberships.create!(user: user, role: role)
           redirect_to admin_team_path(@team), notice: "Member was successfully added."
+        end
+      end
+
+      def update
+        membership = @team.memberships.find(params[:id])
+        role = params[:role].presence_in(Membership::ROLES)
+
+        if role && membership.update(role: role)
+          redirect_to admin_team_path(@team), notice: "Role was successfully updated."
+        else
+          redirect_to admin_team_path(@team), alert: "Invalid role."
         end
       end
 

@@ -48,4 +48,36 @@ RSpec.describe User, type: :model do
       expect { user.destroy }.to change(Session, :count).by(-1)
     end
   end
+
+  describe "#editor_for?" do
+    let(:user) { User.create!(email_address: "test@example.com", password: "securepassword1", password_confirmation: "securepassword1") }
+    let(:team) { Team.create!(name: "Test Team") }
+
+    it "returns true when the user has an editor membership for the team" do
+      Membership.create!(user: user, team: team, role: "editor")
+      expect(user.editor_for?(team)).to be true
+    end
+
+    it "returns false when the user has a member membership for the team" do
+      Membership.create!(user: user, team: team, role: "member")
+      expect(user.editor_for?(team)).to be false
+    end
+
+    it "returns false when the user has no membership for the team" do
+      expect(user.editor_for?(team)).to be false
+    end
+
+    it "checks the role per-team" do
+      other_team = Team.create!(name: "Other Team")
+      Membership.create!(user: user, team: team, role: "editor")
+      Membership.create!(user: user, team: other_team, role: "member")
+
+      expect(user.editor_for?(team)).to be true
+      expect(user.editor_for?(other_team)).to be false
+    end
+
+    it "returns false when team is nil" do
+      expect(user.editor_for?(nil)).to be false
+    end
+  end
 end

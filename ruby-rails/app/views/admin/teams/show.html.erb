@@ -23,7 +23,13 @@
     <% @team.memberships.includes(:user).each do |membership| %>
       <tr>
         <td><%= membership.user.email_address %></td>
-        <td><%= membership.role %></td>
+        <td>
+          <%= form_with(url: admin_team_member_path(@team, membership), method: :patch) do |form| %>
+            <%= form.label :role, "Role for #{membership.user.email_address}", class: "visually-hidden" %>
+            <%= form.select :role, Membership::ROLES.map { |r| [r.capitalize, r] }, {}, onchange: "this.form.requestSubmit()" %>
+            <noscript><%= form.submit "Update" %></noscript>
+          <% end %>
+        </td>
         <td><%= membership.created_at.strftime("%-d %B %Y") %></td>
         <td>
           <% if @team.memberships.count > 1 || membership.user != Current.user %>
@@ -46,6 +52,20 @@
     <%= form.label :email_address, "Email address" %>
     <%= form.text_field :email_address, required: true %>
   </div>
+
+  <fieldset>
+    <legend>Role</legend>
+    <div>
+      <%= form.radio_button :role, "member", id: "role_member", checked: true %>
+      <%= form.label :role_member, "Member" %>
+      <span> — Can create and manage content.</span>
+    </div>
+    <div>
+      <%= form.radio_button :role, "editor", id: "role_editor" %>
+      <%= form.label :role_editor, "Editor" %>
+      <span> — Can create and manage content, and configure content types.</span>
+    </div>
+  </fieldset>
 
   <div>
     <%= form.submit "Add Member" %>

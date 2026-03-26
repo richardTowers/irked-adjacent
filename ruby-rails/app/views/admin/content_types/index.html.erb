@@ -2,7 +2,9 @@
 
 <h1>Content Types</h1>
 
-<%= link_to "New content type", new_admin_content_type_path %>
+<% if Current.user.memberships.exists?(role: "editor") %>
+  <%= link_to "New content type", new_admin_content_type_path %>
+<% end %>
 
 <% if @user_teams.empty? %>
   <p>You need to be a member of a team before you can create content types. <%= link_to "Create a team", new_admin_team_path %>.</p>

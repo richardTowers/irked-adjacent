@@ -27,6 +27,11 @@ RSpec.describe Membership, type: :model do
       expect(membership.errors[:team]).to include("must exist")
     end
 
+    it "accepts the editor role" do
+      membership = Membership.new(user: user, team: team, role: "editor")
+      expect(membership).to be_valid
+    end
+
     it "requires a valid role" do
       membership = Membership.new(user: user, team: team, role: "admin")
       expect(membership).not_to be_valid

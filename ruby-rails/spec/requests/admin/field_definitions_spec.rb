@@ -6,7 +6,7 @@ RSpec.describe "Admin::FieldDefinitions", type: :request do
   let!(:content_type) { ContentType.create!(name: "Blog Post", team: team) }
 
   before do
-    Membership.create!(user: user, team: team)
+    Membership.create!(user: user, team: team, role: "editor")
   end
 
   describe "POST /admin/content-types/:slug/fields" do
@@ -195,6 +195,38 @@ RSpec.describe "Admin::FieldDefinitions", type: :request do
 
       expect(response.body).to include("Remove")
       expect(response.body).to include("Existing node data for this field will become orphaned")
+    end
+  end
+
+  describe "editor role authorization" do
+    let(:member_user) { create_and_sign_in_user(email: "member@example.com") }
+    let!(:field) { content_type.field_definitions.create!(name: "Title", api_key: "title", field_type: "string", position: 0) }
+
+    before do
+      Membership.create!(user: member_user, team: team, role: "member")
+    end
+
+    it "returns 403 when a member tries to create a field" do
+      expect {
+        post "/admin/content-types/blog-post/fields", params: { field_definition: { name: "Body", api_key: "body", field_type: "text" } }
+      }.not_to change(FieldDefinition, :count)
+
+      expect(response).to have_http_status(:forbidden)
+    end
+
+    it "returns 403 when a member tries to update a field" do
+      patch "/admin/content-types/blog-post/fields/#{field.id}", params: { field_definition: { name: "Updated" } }
+
+      expect(response).to have_http_status(:forbidden)
+      expect(field.reload.name).to eq("Title")
+    end
+
+    it "returns 403 when a member tries to delete a field" do
+      expect {
+        delete "/admin/content-types/blog-post/fields/#{field.id}"
+      }.not_to change(FieldDefinition, :count)
+
+      expect(response).to have_http_status(:forbidden)
     end
   end
 end

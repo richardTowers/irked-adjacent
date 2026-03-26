@@ -2,6 +2,7 @@ module Admin
   class ContentTypesController < ApplicationController
     before_action :set_user_teams
     before_action :set_content_type, only: %i[show edit update destroy]
+    before_action :require_editor_role, only: %i[new create edit update destroy]
 
     def index
       @content_types = authorized_content_types.includes(:team, :field_definitions).order(:name)
@@ -17,8 +18,8 @@ module Admin
     def create
       @content_type = ContentType.new(content_type_params)
 
-      unless Current.user.teams.exists?(id: @content_type.team_id)
-        @content_type.errors.add(:team_id, "is not a team you belong to")
+      unless Current.user.editor_for?(Team.find_by(id: @content_type.team_id))
+        @content_type.errors.add(:team_id, "is not a team you belong to or you lack the editor role")
         return render :new, status: :unprocessable_entity
       end
 
@@ -69,6 +70,17 @@ module Admin
 
     def update_params
       params.require(:content_type).permit(:name, :slug, :description)
+    end
+
+    def require_editor_role
+      team = @content_type&.team
+      team ||= Current.user.teams.find_by(id: params.dig(:content_type, :team_id)) if params[:content_type]
+
+      if team
+        render_forbidden unless Current.user.editor_for?(team)
+      else
+        render_forbidden unless Current.user.memberships.exists?(role: "editor")
+      end
     end
   end
 end

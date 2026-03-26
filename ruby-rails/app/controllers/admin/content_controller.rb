@@ -4,7 +4,7 @@ module Admin
     before_action :set_node, only: %i[show edit update destroy]
 
     def index
-      @nodes = authorized_nodes.order(updated_at: :desc)
+      @nodes = authorized_nodes.includes(:content_type).order(updated_at: :desc)
     end
 
     def show
