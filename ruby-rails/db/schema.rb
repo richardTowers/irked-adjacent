@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_03_26_130000) do
+ActiveRecord::Schema[8.1].define(version: 2026_03_26_140000) do
   create_table "content_types", force: :cascade do |t|
     t.datetime "created_at", null: false
     t.text "description"
@@ -48,14 +48,16 @@ ActiveRecord::Schema[8.1].define(version: 2026_03_26_130000) do
   end
 
   create_table "nodes", force: :cascade do |t|
-    t.text "body"
+    t.integer "content_type_id", null: false
     t.datetime "created_at", null: false
+    t.json "fields", default: {}, null: false
     t.boolean "published", default: false, null: false
     t.datetime "published_at"
     t.string "slug", null: false
     t.integer "team_id"
     t.string "title", null: false
     t.datetime "updated_at", null: false
+    t.index ["content_type_id"], name: "index_nodes_on_content_type_id"
     t.index ["slug"], name: "index_nodes_on_slug", unique: true
     t.index ["team_id"], name: "index_nodes_on_team_id"
   end
@@ -89,6 +91,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_03_26_130000) do
   add_foreign_key "field_definitions", "content_types"
   add_foreign_key "memberships", "teams"
   add_foreign_key "memberships", "users"
+  add_foreign_key "nodes", "content_types"
   add_foreign_key "nodes", "teams"
   add_foreign_key "sessions", "users"
 end

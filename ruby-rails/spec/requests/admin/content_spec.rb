@@ -3,6 +3,7 @@ require "rails_helper"
 RSpec.describe "Admin::Content", type: :request do
   let(:user) { create_and_sign_in_user }
   let(:team) { Team.create!(name: "Test Team") }
+  let(:content_type) { ContentType.create!(name: "Page", team: team) }
 
   before do
     Membership.create!(user: user, team: team)
@@ -20,11 +21,11 @@ RSpec.describe "Admin::Content", type: :request do
 
     context "when nodes exist" do
       let!(:older_node) do
-        Node.create!(title: "Older Post", body: "Older body", published: true, team: team)
+        Node.create!(title: "Older Post", published: true, team: team, content_type: content_type)
       end
 
       let!(:newer_node) do
-        Node.create!(title: "Newer Post", body: "Newer body", published: false, team: team)
+        Node.create!(title: "Newer Post", published: false, team: team, content_type: content_type)
       end
 
       it "returns 200 and displays a table" do
@@ -89,9 +90,10 @@ RSpec.describe "Admin::Content", type: :request do
 
     context "authorization" do
       let(:other_team) { Team.create!(name: "Other Team") }
-      let!(:own_node) { Node.create!(title: "My Node", team: team) }
-      let!(:other_node) { Node.create!(title: "Other Node", team: other_team) }
-      let!(:unassigned_node) { Node.create!(title: "Unassigned Node", team: other_team) }
+      let(:other_ct) { ContentType.create!(name: "Other Page", team: other_team) }
+      let!(:own_node) { Node.create!(title: "My Node", team: team, content_type: content_type) }
+      let!(:other_node) { Node.create!(title: "Other Node", team: other_team, content_type: other_ct) }
+      let!(:unassigned_node) { Node.create!(title: "Unassigned Node", team: other_team, content_type: other_ct) }
 
       it "only shows nodes belonging to the user's teams" do
         get "/admin/content"
@@ -110,12 +112,18 @@ RSpec.describe "Admin::Content", type: :request do
   end
 
   describe "GET /admin/content/:id" do
+    let!(:body_field) do
+      content_type.field_definitions.create!(name: "Body", api_key: "body", field_type: "text", position: 0)
+    end
+
     let!(:node) do
+      body_field # ensure field definition exists before node creation
       Node.create!(
         title: "Test Node",
-        body: "Some <strong>bold</strong> content",
+        fields: { "body" => "Some <strong>bold</strong> content" },
         published: true,
-        team: team
+        team: team,
+        content_type: content_type
       )
     end
 
@@ -139,7 +147,13 @@ RSpec.describe "Admin::Content", type: :request do
       expect(response.body).to include("Test Team")
     end
 
-    it "escapes HTML in the body" do
+    it "displays the content type name" do
+      get "/admin/content/#{node.id}"
+
+      expect(response.body).to include("Page")
+    end
+
+    it "escapes HTML in the fields" do
       get "/admin/content/#{node.id}"
 
       expect(response.body).to include("&lt;strong&gt;bold&lt;/strong&gt;")
@@ -174,7 +188,8 @@ RSpec.describe "Admin::Content", type: :request do
 
     context "authorization" do
       let(:other_team) { Team.create!(name: "Other Team") }
-      let!(:other_node) { Node.create!(title: "Other Node", team: other_team) }
+      let(:other_ct) { ContentType.create!(name: "Other Page", team: other_team) }
+      let!(:other_node) { Node.create!(title: "Other Node", team: other_team, content_type: other_ct) }
 
       it "returns 404 for a node belonging to another team" do
         get "/admin/content/#{other_node.id}"
@@ -192,12 +207,12 @@ RSpec.describe "Admin::Content", type: :request do
       expect(response.body).to include("<h1>New Node</h1>")
     end
 
-    it "has form fields for title, slug, body, and published" do
+    it "has form fields for title, slug, content_type, and published" do
       get "/admin/content/new"
 
       expect(response.body).to include("node[title]")
       expect(response.body).to include("node[slug]")
-      expect(response.body).to include("node[body]")
+      expect(response.body).to include("node[content_type_id]")
       expect(response.body).to include("node[published]")
     end
 
@@ -252,7 +267,7 @@ RSpec.describe "Admin::Content", type: :request do
     context "with valid params" do
       it "creates a node and redirects to the show page" do
         expect {
-          post "/admin/content", params: { node: { title: "My First Post", body: "Hello world", team_id: team.id } }
+          post "/admin/content", params: { node: { title: "My First Post", team_id: team.id, content_type_id: content_type.id } }
         }.to change(Node, :count).by(1)
 
         node = Node.last
@@ -260,7 +275,7 @@ RSpec.describe "Admin::Content", type: :request do
       end
 
       it "shows a success flash message after redirect" do
-        post "/admin/content", params: { node: { title: "My First Post", team_id: team.id } }
+        post "/admin/content", params: { node: { title: "My First Post", team_id: team.id, content_type_id: content_type.id } }
 
         follow_redirect!
 
@@ -268,7 +283,7 @@ RSpec.describe "Admin::Content", type: :request do
       end
 
       it "has the flash message in an element with role='status'" do
-        post "/admin/content", params: { node: { title: "Flash Test", team_id: team.id } }
+        post "/admin/content", params: { node: { title: "Flash Test", team_id: team.id, content_type_id: content_type.id } }
 
         follow_redirect!
 
@@ -279,10 +294,11 @@ RSpec.describe "Admin::Content", type: :request do
 
     context "with a team the user does not belong to" do
       let(:other_team) { Team.create!(name: "Other Team") }
+      let(:other_ct) { ContentType.create!(name: "Other Page", team: other_team) }
 
       it "returns 422 and does not create the node" do
         expect {
-          post "/admin/content", params: { node: { title: "Sneaky Post", team_id: other_team.id } }
+          post "/admin/content", params: { node: { title: "Sneaky Post", team_id: other_team.id, content_type_id: other_ct.id } }
         }.not_to change(Node, :count)
 
         expect(response).to have_http_status(:unprocessable_entity)
@@ -291,22 +307,15 @@ RSpec.describe "Admin::Content", type: :request do
 
     context "with blank title" do
       it "returns 422 and re-renders the form with errors" do
-        post "/admin/content", params: { node: { title: "", body: "Some body", team_id: team.id } }
+        post "/admin/content", params: { node: { title: "", team_id: team.id, content_type_id: content_type.id } }
 
         expect(response).to have_http_status(:unprocessable_entity)
         expect(response.body).to include("New Node")
         expect(response.body).to include("role=\"alert\"")
       end
 
-      it "preserves previously entered values" do
-        post "/admin/content", params: { node: { title: "", body: "Keep this body", team_id: team.id } }
-
-        expect(response).to have_http_status(:unprocessable_entity)
-        expect(response.body).to include("Keep this body")
-      end
-
       it "marks the title field as aria-invalid" do
-        post "/admin/content", params: { node: { title: "", team_id: team.id } }
+        post "/admin/content", params: { node: { title: "", team_id: team.id, content_type_id: content_type.id } }
 
         expect(response.body).to include('aria-invalid="true"')
         expect(response.body).to include("title-error")
@@ -315,23 +324,23 @@ RSpec.describe "Admin::Content", type: :request do
 
     context "slug handling" do
       it "auto-generates a slug from the title when slug is blank" do
-        post "/admin/content", params: { node: { title: "My Great Post", team_id: team.id } }
+        post "/admin/content", params: { node: { title: "My Great Post", team_id: team.id, content_type_id: content_type.id } }
 
         node = Node.last
         expect(node.slug).to eq("my-great-post")
       end
 
       it "uses the provided slug when one is given" do
-        post "/admin/content", params: { node: { title: "My Great Post", slug: "custom-slug", team_id: team.id } }
+        post "/admin/content", params: { node: { title: "My Great Post", slug: "custom-slug", team_id: team.id, content_type_id: content_type.id } }
 
         node = Node.last
         expect(node.slug).to eq("custom-slug")
       end
 
       it "returns 422 with error when slug is a duplicate" do
-        Node.create!(title: "Existing", slug: "taken-slug", team: team)
+        Node.create!(title: "Existing", slug: "taken-slug", team: team, content_type: content_type)
 
-        post "/admin/content", params: { node: { title: "New Post", slug: "taken-slug", team_id: team.id } }
+        post "/admin/content", params: { node: { title: "New Post", slug: "taken-slug", team_id: team.id, content_type_id: content_type.id } }
 
         expect(response).to have_http_status(:unprocessable_entity)
         expect(response.body).to include("slug-error")
@@ -340,7 +349,7 @@ RSpec.describe "Admin::Content", type: :request do
 
     context "published flag" do
       it "sets published to true and records published_at when checked" do
-        post "/admin/content", params: { node: { title: "Published Post", published: "1", team_id: team.id } }
+        post "/admin/content", params: { node: { title: "Published Post", published: "1", team_id: team.id, content_type_id: content_type.id } }
 
         node = Node.last
         expect(node.published).to be true
@@ -348,7 +357,7 @@ RSpec.describe "Admin::Content", type: :request do
       end
 
       it "defaults to draft when published is not checked" do
-        post "/admin/content", params: { node: { title: "Draft Post", team_id: team.id } }
+        post "/admin/content", params: { node: { title: "Draft Post", team_id: team.id, content_type_id: content_type.id } }
 
         node = Node.last
         expect(node.published).to be false
@@ -358,7 +367,7 @@ RSpec.describe "Admin::Content", type: :request do
 
     context "strong parameters" do
       it "ignores unpermitted parameters" do
-        post "/admin/content", params: { node: { title: "Safe Post", created_at: "2000-01-01", team_id: team.id } }
+        post "/admin/content", params: { node: { title: "Safe Post", created_at: "2000-01-01", team_id: team.id, content_type_id: content_type.id } }
 
         node = Node.last
         expect(node.title).to eq("Safe Post")
@@ -369,7 +378,7 @@ RSpec.describe "Admin::Content", type: :request do
 
   describe "GET /admin/content/:id/edit" do
     let!(:node) do
-      Node.create!(title: "Editable Node", slug: "editable-node", body: "Original body", published: false, team: team)
+      Node.create!(title: "Editable Node", slug: "editable-node", published: false, team: team, content_type: content_type)
     end
 
     it "returns 200 and displays the edit form" do
@@ -396,15 +405,14 @@ RSpec.describe "Admin::Content", type: :request do
 
       expect(response.body).to include("Editable Node")
       expect(response.body).to include("editable-node")
-      expect(response.body).to include("Original body")
     end
 
-    it "has form fields for title, slug, body, and published" do
+    it "has form fields for title, slug, content_type, and published" do
       get "/admin/content/#{node.id}/edit"
 
       expect(response.body).to include("node[title]")
       expect(response.body).to include("node[slug]")
-      expect(response.body).to include("node[body]")
+      expect(response.body).to include("node[content_type_id]")
       expect(response.body).to include("node[published]")
     end
 
@@ -429,7 +437,8 @@ RSpec.describe "Admin::Content", type: :request do
 
     context "authorization" do
       let(:other_team) { Team.create!(name: "Other Team") }
-      let!(:other_node) { Node.create!(title: "Other Node", team: other_team) }
+      let(:other_ct) { ContentType.create!(name: "Other Page", team: other_team) }
+      let!(:other_node) { Node.create!(title: "Other Node", team: other_team, content_type: other_ct) }
 
       it "returns 404 for a node belonging to another team" do
         get "/admin/content/#{other_node.id}/edit"
@@ -441,7 +450,7 @@ RSpec.describe "Admin::Content", type: :request do
 
   describe "PATCH /admin/content/:id" do
     let!(:node) do
-      Node.create!(title: "Original Title", slug: "original-title", body: "Original body", published: false, team: team)
+      Node.create!(title: "Original Title", slug: "original-title", published: false, team: team, content_type: content_type)
     end
 
     context "with valid params" do
@@ -479,13 +488,6 @@ RSpec.describe "Admin::Content", type: :request do
         expect(response.body).to include("role=\"alert\"")
       end
 
-      it "preserves the submitted values in the form" do
-        patch "/admin/content/#{node.id}", params: { node: { title: "", body: "Updated body" } }
-
-        expect(response).to have_http_status(:unprocessable_entity)
-        expect(response.body).to include("Updated body")
-      end
-
       it "marks the title field as aria-invalid" do
         patch "/admin/content/#{node.id}", params: { node: { title: "" } }
 
@@ -496,7 +498,7 @@ RSpec.describe "Admin::Content", type: :request do
 
     context "slug handling" do
       it "returns 422 with error when slug duplicates another node" do
-        Node.create!(title: "Other Node", slug: "taken-slug", team: team)
+        Node.create!(title: "Other Node", slug: "taken-slug", team: team, content_type: content_type)
 
         patch "/admin/content/#{node.id}", params: { node: { slug: "taken-slug" } }
 
@@ -544,7 +546,8 @@ RSpec.describe "Admin::Content", type: :request do
 
     context "authorization" do
       let(:other_team) { Team.create!(name: "Other Team") }
-      let!(:other_node) { Node.create!(title: "Other Node", team: other_team) }
+      let(:other_ct) { ContentType.create!(name: "Other Page", team: other_team) }
+      let!(:other_node) { Node.create!(title: "Other Node", team: other_team, content_type: other_ct) }
 
       it "returns 404 for a node belonging to another team" do
         patch "/admin/content/#{other_node.id}", params: { node: { title: "Hacked" } }
@@ -556,7 +559,7 @@ RSpec.describe "Admin::Content", type: :request do
 
   describe "DELETE /admin/content/:id" do
     let!(:node) do
-      Node.create!(title: "Doomed Node", slug: "doomed-node", body: "Goodbye", team: team)
+      Node.create!(title: "Doomed Node", slug: "doomed-node", team: team, content_type: content_type)
     end
 
     it "deletes the node and redirects to the listing page" do
@@ -606,7 +609,8 @@ RSpec.describe "Admin::Content", type: :request do
 
     context "authorization" do
       let(:other_team) { Team.create!(name: "Other Team") }
-      let!(:other_node) { Node.create!(title: "Other Node", team: other_team) }
+      let(:other_ct) { ContentType.create!(name: "Other Page", team: other_team) }
+      let!(:other_node) { Node.create!(title: "Other Node", team: other_team, content_type: other_ct) }
 
       it "returns 404 for a node belonging to another team" do
         expect {
@@ -619,7 +623,7 @@ RSpec.describe "Admin::Content", type: :request do
   end
 
   describe "show page delete button" do
-    let!(:node) { Node.create!(title: "Test Node", team: team) }
+    let!(:node) { Node.create!(title: "Test Node", team: team, content_type: content_type) }
 
     it "has a delete button rendered as a form with DELETE method" do
       get "/admin/content/#{node.id}"

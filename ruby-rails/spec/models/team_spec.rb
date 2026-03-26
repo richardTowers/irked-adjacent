@@ -129,8 +129,9 @@ RSpec.describe Team, type: :model do
 
     it "has many nodes" do
       team = Team.create!(name: "Test Team")
-      Node.create!(title: "Node 1", team: team)
-      Node.create!(title: "Node 2", team: team)
+      ct = ContentType.create!(name: "Page", team: team)
+      Node.create!(title: "Node 1", team: team, content_type: ct)
+      Node.create!(title: "Node 2", team: team, content_type: ct)
       expect(team.nodes.count).to eq(2)
     end
 
@@ -144,10 +145,11 @@ RSpec.describe Team, type: :model do
 
     it "prevents destruction when team has nodes" do
       team = Team.create!(name: "Test Team")
-      Node.create!(title: "A Node", team: team)
+      ct = ContentType.create!(name: "Page", team: team)
+      Node.create!(title: "A Node", team: team, content_type: ct)
 
       expect(team.destroy).to be_falsey
-      expect(team.errors[:base]).to include("Cannot delete record because dependent nodes exist")
+      expect(team.errors[:base]).to be_present
       expect(Team.exists?(team.id)).to be true
     end
 

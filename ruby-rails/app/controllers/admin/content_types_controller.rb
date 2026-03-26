@@ -41,7 +41,7 @@ module Admin
     end
 
     def destroy
-      if @content_type.respond_to?(:nodes) && @content_type.nodes.any?
+      if @content_type.nodes.any?
         redirect_to admin_content_type_path(@content_type.slug), alert: "Cannot delete a content type that has nodes. Delete or reassign the nodes first."
       else
         @content_type.destroy

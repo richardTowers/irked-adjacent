@@ -144,8 +144,7 @@ RSpec.describe ContentType, type: :model do
       expect(team.content_types.count).to eq(2)
     end
 
-    # Node-ContentType FK is added in CM-04; this test will be enabled then
-    it "prevents destruction when content type has nodes", skip: "requires CM-04 (content_type_id on nodes)" do
+    it "prevents destruction when content type has nodes" do
       content_type = ContentType.create!(name: "Blog Post", team: team)
       Node.create!(title: "A Node", team: team, content_type: content_type)
 

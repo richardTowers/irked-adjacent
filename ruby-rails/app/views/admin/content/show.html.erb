@@ -4,11 +4,25 @@
   <dt>Team</dt>
   <dd><%= @node.team&.name %></dd>
 
+  <dt>Content Type</dt>
+  <dd><%= @node.content_type&.name %></dd>
+
   <dt>Slug</dt>
   <dd><%= @node.slug %></dd>
 
-  <dt>Body</dt>
-  <dd><%= @node.body %></dd>
+  <dt>Fields</dt>
+  <dd>
+    <% if @node.fields.present? && @node.fields.any? %>
+      <dl>
+        <% @node.fields.each do |key, value| %>
+          <dt><%= key %></dt>
+          <dd><%= value %></dd>
+        <% end %>
+      </dl>
+    <% else %>
+      <em>No fields</em>
+    <% end %>
+  </dd>
 
   <dt>Status</dt>
   <dd><%= @node.published? ? "Published" : "Draft" %></dd>

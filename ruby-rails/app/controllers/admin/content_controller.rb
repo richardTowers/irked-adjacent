@@ -60,11 +60,11 @@ module Admin
     end
 
     def node_params
-      params.require(:node).permit(:title, :slug, :body, :published, :team_id)
+      params.require(:node).permit(:title, :slug, :published, :team_id, :content_type_id)
     end
 
     def update_params
-      params.require(:node).permit(:title, :slug, :body, :published)
+      params.require(:node).permit(:title, :slug, :published, :content_type_id)
     end
   end
 end

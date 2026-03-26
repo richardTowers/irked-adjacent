@@ -23,6 +23,17 @@
   <% end %>
 
   <div>
+    <%= form.label :content_type_id, "Content Type" %>
+    <% content_types = local_assigns[:show_team_selector] ? ContentType.where(team: @user_teams) : ContentType.where(team_id: @node.team_id) %>
+    <%= form.collection_select :content_type_id, content_types.order(:name), :id, :name,
+          { prompt: "Select a content type" },
+          **(@node.errors[:content_type_id].any? ? { "aria-invalid": "true", "aria-describedby": "content-type-id-error" } : {}) %>
+    <% if @node.errors[:content_type_id].any? %>
+      <span id="content-type-id-error"><%= @node.errors[:content_type_id].join(", ") %></span>
+    <% end %>
+  </div>
+
+  <div>
     <%= form.label :title %>
     <%= form.text_field :title,
           required: true,
@@ -39,11 +50,6 @@
     <% if @node.errors[:slug].any? %>
       <span id="slug-error"><%= @node.errors[:slug].join(", ") %></span>
     <% end %>
-  </div>
-
-  <div>
-    <%= form.label :body %>
-    <%= form.text_area :body %>
   </div>
 
   <div>

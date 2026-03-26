@@ -3,7 +3,7 @@ class ContentType < ApplicationRecord
 
   belongs_to :team
   has_many :field_definitions, -> { order(:position) }, dependent: :destroy
-  # has_many :nodes added in CM-04 when content_type_id column is added to nodes
+  has_many :nodes, dependent: :restrict_with_error
 
   validates :name, presence: true, length: { maximum: 255 }
 
