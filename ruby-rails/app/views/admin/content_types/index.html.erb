@@ -1,0 +1,32 @@
+<% content_for(:title) { "Content Types" } %>
+
+<h1>Content Types</h1>
+
+<%= link_to "New content type", new_admin_content_type_path %>
+
+<% if @user_teams.empty? %>
+  <p>You need to be a member of a team before you can create content types. <%= link_to "Create a team", new_admin_team_path %>.</p>
+<% elsif @content_types.empty? %>
+  <p>No content types yet.</p>
+<% else %>
+  <table>
+    <thead>
+      <tr>
+        <th scope="col">Name</th>
+        <th scope="col">Team</th>
+        <th scope="col">Fields</th>
+        <th scope="col">Nodes</th>
+      </tr>
+    </thead>
+    <tbody>
+      <% @content_types.each do |content_type| %>
+        <tr>
+          <td><%= link_to content_type.name, admin_content_type_path(content_type.slug) %></td>
+          <td><%= content_type.team.name %></td>
+          <td><%= content_type.field_definitions.size %></td>
+          <td><%= content_type.respond_to?(:nodes) ? content_type.nodes.count : 0 %></td>
+        </tr>
+      <% end %>
+    </tbody>
+  </table>
+<% end %>

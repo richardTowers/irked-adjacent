@@ -1,0 +1,60 @@
+<% if field_definition.errors.any? %>
+  <div role="alert">
+    <h4><%= pluralize(field_definition.errors.count, "error") %> prohibited this field from being saved:</h4>
+    <ul>
+      <% field_definition.errors.full_messages.each do |message| %>
+        <li><%= message %></li>
+      <% end %>
+    </ul>
+  </div>
+<% end %>
+
+<%= form_with(model: field_definition, url: url, method: method) do |form| %>
+  <div>
+    <%= form.label :name %>
+    <%= form.text_field :name,
+          required: true,
+          **field_error_attrs(field_definition, :name) %>
+    <% if field_definition.errors[:name].any? %>
+      <span id="field-definition-name-error"><%= field_definition.errors[:name].join(", ") %></span>
+    <% end %>
+  </div>
+
+  <div>
+    <%= form.label :api_key, "API key" %>
+    <%= form.text_field :api_key,
+          required: true,
+          **field_error_attrs(field_definition, :api_key) %>
+    <% if field_definition.errors[:api_key].any? %>
+      <span id="field-definition-api-key-error"><%= field_definition.errors[:api_key].join(", ") %></span>
+    <% end %>
+  </div>
+
+  <div>
+    <%= form.label :field_type, "Field type" %>
+    <%= form.select :field_type, FieldDefinition::FIELD_TYPES.map { |t| [t.humanize, t] },
+          { prompt: "Select a field type" },
+          **field_error_attrs(field_definition, :field_type) %>
+    <% if field_definition.errors[:field_type].any? %>
+      <span id="field-definition-field-type-error"><%= field_definition.errors[:field_type].join(", ") %></span>
+    <% end %>
+  </div>
+
+  <div>
+    <%= form.check_box :required %>
+    <%= form.label :required %>
+  </div>
+
+  <div>
+    <%= form.label :position %>
+    <%= form.number_field :position, min: 0,
+          **field_error_attrs(field_definition, :position) %>
+    <% if field_definition.errors[:position].any? %>
+      <span id="field-definition-position-error"><%= field_definition.errors[:position].join(", ") %></span>
+    <% end %>
+  </div>
+
+  <div>
+    <%= form.submit submit_label %>
+  </div>
+<% end %>

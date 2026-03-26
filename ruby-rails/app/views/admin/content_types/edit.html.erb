@@ -1,0 +1,7 @@
+<% content_for(:title) { "Edit #{@content_type.name} — Content Types" } %>
+
+<h1>Edit Content Type</h1>
+
+<p><strong>Team:</strong> <span><%= @content_type.team.name %></span></p>
+
+<%= render "form", url: admin_content_type_path(@content_type.slug), submit_label: "Update Content Type", cancel_path: admin_content_type_path(@content_type.slug), show_team_selector: false %>

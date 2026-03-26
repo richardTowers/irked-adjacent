@@ -16,6 +16,9 @@ Rails.application.routes.draw do
 
   namespace :admin do
     resources :content, only: [:index, :show, :new, :create, :edit, :update, :destroy], controller: "content", constraints: { id: /\d+/ }
+    resources :content_types, param: :slug, path: "content-types" do
+      resources :fields, only: [:create, :update, :destroy], controller: "field_definitions"
+    end
     resources :teams do
       resources :members, only: [:create, :destroy], module: :teams
     end

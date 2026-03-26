@@ -29,6 +29,7 @@
     <header>
       <nav>
         <%= link_to "Content", "/admin/content" %>
+        <%= link_to "Content Types", admin_content_types_path %>
         <%= link_to "Teams", admin_teams_path %>
         <% if authenticated? %>
           <%= button_to "Sign out", session_path, method: :delete %>

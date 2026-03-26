@@ -1,0 +1,53 @@
+<% if @content_type.errors.any? %>
+  <div role="alert">
+    <h2><%= pluralize(@content_type.errors.count, "error") %> prohibited this content type from being saved:</h2>
+    <ul>
+      <% @content_type.errors.full_messages.each do |message| %>
+        <li><%= message %></li>
+      <% end %>
+    </ul>
+  </div>
+<% end %>
+
+<%= form_with(model: @content_type, url: url) do |form| %>
+  <% if local_assigns[:show_team_selector] %>
+    <div>
+      <%= form.label :team_id, "Team" %>
+      <%= form.collection_select :team_id, @user_teams.order(:name), :id, :name,
+            { prompt: "Select a team" },
+            **(@content_type.errors[:team_id].any? ? { "aria-invalid": "true", "aria-describedby": "team-id-error" } : {}) %>
+      <% if @content_type.errors[:team_id].any? %>
+        <span id="team-id-error"><%= @content_type.errors[:team_id].join(", ") %></span>
+      <% end %>
+    </div>
+  <% end %>
+
+  <div>
+    <%= form.label :name %>
+    <%= form.text_field :name,
+          required: true,
+          **(@content_type.errors[:name].any? ? { "aria-invalid": "true", "aria-describedby": "name-error" } : {}) %>
+    <% if @content_type.errors[:name].any? %>
+      <span id="name-error"><%= @content_type.errors[:name].join(", ") %></span>
+    <% end %>
+  </div>
+
+  <div>
+    <%= form.label :slug %>
+    <%= form.text_field :slug,
+          **(@content_type.errors[:slug].any? ? { "aria-invalid": "true", "aria-describedby": "slug-error" } : {}) %>
+    <% if @content_type.errors[:slug].any? %>
+      <span id="slug-error"><%= @content_type.errors[:slug].join(", ") %></span>
+    <% end %>
+  </div>
+
+  <div>
+    <%= form.label :description %>
+    <%= form.text_area :description %>
+  </div>
+
+  <div>
+    <%= form.submit submit_label %>
+    <%= link_to "Cancel", cancel_path %>
+  </div>
+<% end %>

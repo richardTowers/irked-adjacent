@@ -1,0 +1,9 @@
+<% content_for(:title) { "New Content Type" } %>
+
+<h1>New Content Type</h1>
+
+<% if @user_teams.empty? %>
+  <p>You need to be a member of a team before you can create content types. <%= link_to "Create a team", new_admin_team_path %>.</p>
+<% else %>
+  <%= render "form", url: admin_content_types_path, submit_label: "Create Content Type", cancel_path: admin_content_types_path, show_team_selector: true %>
+<% end %>
