@@ -10,6 +10,18 @@
 <% end %>
 
 <%= form_with(model: @node, url: url) do |form| %>
+  <% if local_assigns[:show_team_selector] %>
+    <div>
+      <%= form.label :team_id, "Team" %>
+      <%= form.collection_select :team_id, @user_teams.order(:name), :id, :name,
+            { prompt: "Select a team" },
+            **(@node.errors[:team_id].any? ? { "aria-invalid": "true", "aria-describedby": "team-id-error" } : {}) %>
+      <% if @node.errors[:team_id].any? %>
+        <span id="team-id-error"><%= @node.errors[:team_id].join(", ") %></span>
+      <% end %>
+    </div>
+  <% end %>
+
   <div>
     <%= form.label :title %>
     <%= form.text_field :title,

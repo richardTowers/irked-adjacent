@@ -1,3 +1,5 @@
 <h1>Edit Node</h1>
 
-<%= render "form", url: admin_content_path(@node), submit_label: "Update Node", cancel_path: admin_content_path(@node) %>
+<p><strong>Team:</strong> <span><%= @node.team&.name %></span></p>
+
+<%= render "form", url: admin_content_path(@node), submit_label: "Update Node", cancel_path: admin_content_path(@node), show_team_selector: false %>

@@ -1,9 +1,12 @@
 require "rails_helper"
 
 RSpec.describe "Admin::Content", type: :request do
-  before { create_and_sign_in_user }
-
+  let(:user) { create_and_sign_in_user }
   let(:team) { Team.create!(name: "Test Team") }
+
+  before do
+    Membership.create!(user: user, team: team)
+  end
 
   describe "GET /admin/content" do
     context "when there are no nodes" do
@@ -36,8 +39,15 @@ RSpec.describe "Admin::Content", type: :request do
 
         expect(response.body).to include("<th scope=\"col\">Title</th>")
         expect(response.body).to include("<th scope=\"col\">Slug</th>")
+        expect(response.body).to include("<th scope=\"col\">Team</th>")
         expect(response.body).to include("<th scope=\"col\">Status</th>")
         expect(response.body).to include("<th scope=\"col\">Updated</th>")
+      end
+
+      it "displays the team name in the table" do
+        get "/admin/content"
+
+        expect(response.body).to include("Test Team")
       end
 
       it "orders nodes by updated_at descending" do
@@ -60,6 +70,34 @@ RSpec.describe "Admin::Content", type: :request do
 
         expect(response.body).to include("Published")
         expect(response.body).to include("Draft")
+      end
+    end
+
+    context "when user has no teams" do
+      before do
+        Membership.where(user: user).destroy_all
+      end
+
+      it "shows guidance to create or join a team" do
+        get "/admin/content"
+
+        expect(response).to have_http_status(:ok)
+        expect(response.body).to include("You need to be a member of a team before you can create content.")
+        expect(response.body).to include("Create a team")
+      end
+    end
+
+    context "authorization" do
+      let(:other_team) { Team.create!(name: "Other Team") }
+      let!(:own_node) { Node.create!(title: "My Node", team: team) }
+      let!(:other_node) { Node.create!(title: "Other Node", team: other_team) }
+      let!(:unassigned_node) { Node.create!(title: "Unassigned Node", team: other_team) }
+
+      it "only shows nodes belonging to the user's teams" do
+        get "/admin/content"
+
+        expect(response.body).to include("My Node")
+        expect(response.body).not_to include("Other Node")
       end
     end
 
@@ -95,6 +133,12 @@ RSpec.describe "Admin::Content", type: :request do
       expect(response.body).to include("Published")
     end
 
+    it "displays the team name" do
+      get "/admin/content/#{node.id}"
+
+      expect(response.body).to include("Test Team")
+    end
+
     it "escapes HTML in the body" do
       get "/admin/content/#{node.id}"
 
@@ -127,6 +171,17 @@ RSpec.describe "Admin::Content", type: :request do
 
       expect(response).to have_http_status(:not_found)
     end
+
+    context "authorization" do
+      let(:other_team) { Team.create!(name: "Other Team") }
+      let!(:other_node) { Node.create!(title: "Other Node", team: other_team) }
+
+      it "returns 404 for a node belonging to another team" do
+        get "/admin/content/#{other_node.id}"
+
+        expect(response).to have_http_status(:not_found)
+      end
+    end
   end
 
   describe "GET /admin/content/new" do
@@ -146,6 +201,19 @@ RSpec.describe "Admin::Content", type: :request do
       expect(response.body).to include("node[published]")
     end
 
+    it "has a team selector dropdown" do
+      get "/admin/content/new"
+
+      expect(response.body).to include("node[team_id]")
+      expect(response.body).to include("Test Team")
+    end
+
+    it "has a label for the team selector" do
+      get "/admin/content/new"
+
+      expect(response.body).to match(/<label for="node_team_id">Team<\/label>/)
+    end
+
     it "has a submit button labeled 'Create Node'" do
       get "/admin/content/new"
 
@@ -163,6 +231,20 @@ RSpec.describe "Admin::Content", type: :request do
       get "/admin/content/new"
 
       expect(response.body).to match(/required="required"[^>]*name="node\[title\]"/)
+    end
+
+    context "when user has no teams" do
+      before do
+        Membership.where(user: user).destroy_all
+      end
+
+      it "shows a message instead of the form" do
+        get "/admin/content/new"
+
+        expect(response).to have_http_status(:ok)
+        expect(response.body).to include("You need to be a member of a team before you can create content.")
+        expect(response.body).not_to include("node[title]")
+      end
     end
   end
 
@@ -192,6 +274,18 @@ RSpec.describe "Admin::Content", type: :request do
 
         expect(response.body).to include('role="status"')
         expect(response.body).to include("Node was successfully created.")
+      end
+    end
+
+    context "with a team the user does not belong to" do
+      let(:other_team) { Team.create!(name: "Other Team") }
+
+      it "returns 422 and does not create the node" do
+        expect {
+          post "/admin/content", params: { node: { title: "Sneaky Post", team_id: other_team.id } }
+        }.not_to change(Node, :count)
+
+        expect(response).to have_http_status(:unprocessable_entity)
       end
     end
 
@@ -285,6 +379,18 @@ RSpec.describe "Admin::Content", type: :request do
       expect(response.body).to include("<h1>Edit Node</h1>")
     end
 
+    it "displays the team name" do
+      get "/admin/content/#{node.id}/edit"
+
+      expect(response.body).to include("Test Team")
+    end
+
+    it "does not include a team selector" do
+      get "/admin/content/#{node.id}/edit"
+
+      expect(response.body).not_to include("node[team_id]")
+    end
+
     it "pre-fills the form with the node's current values" do
       get "/admin/content/#{node.id}/edit"
 
@@ -319,6 +425,17 @@ RSpec.describe "Admin::Content", type: :request do
       get "/admin/content/999999/edit"
 
       expect(response).to have_http_status(:not_found)
+    end
+
+    context "authorization" do
+      let(:other_team) { Team.create!(name: "Other Team") }
+      let!(:other_node) { Node.create!(title: "Other Node", team: other_team) }
+
+      it "returns 404 for a node belonging to another team" do
+        get "/admin/content/#{other_node.id}/edit"
+
+        expect(response).to have_http_status(:not_found)
+      end
     end
   end
 
@@ -424,6 +541,17 @@ RSpec.describe "Admin::Content", type: :request do
 
       expect(response).to have_http_status(:not_found)
     end
+
+    context "authorization" do
+      let(:other_team) { Team.create!(name: "Other Team") }
+      let!(:other_node) { Node.create!(title: "Other Node", team: other_team) }
+
+      it "returns 404 for a node belonging to another team" do
+        patch "/admin/content/#{other_node.id}", params: { node: { title: "Hacked" } }
+
+        expect(response).to have_http_status(:not_found)
+      end
+    end
   end
 
   describe "DELETE /admin/content/:id" do
@@ -474,6 +602,19 @@ RSpec.describe "Admin::Content", type: :request do
       delete "/admin/content/abc"
 
       expect(response).to have_http_status(:not_found)
+    end
+
+    context "authorization" do
+      let(:other_team) { Team.create!(name: "Other Team") }
+      let!(:other_node) { Node.create!(title: "Other Node", team: other_team) }
+
+      it "returns 404 for a node belonging to another team" do
+        expect {
+          delete "/admin/content/#{other_node.id}"
+        }.not_to change(Node, :count)
+
+        expect(response).to have_http_status(:not_found)
+      end
     end
   end
 

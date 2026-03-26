@@ -1,6 +1,9 @@
 <h1><%= @node.title %></h1>
 
 <dl>
+  <dt>Team</dt>
+  <dd><%= @node.team&.name %></dd>
+
   <dt>Slug</dt>
   <dd><%= @node.slug %></dd>
 
