@@ -10,7 +10,32 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_03_26_102630) do
+ActiveRecord::Schema[8.1].define(version: 2026_03_26_130000) do
+  create_table "content_types", force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.text "description"
+    t.string "name", null: false
+    t.string "slug", null: false
+    t.integer "team_id", null: false
+    t.datetime "updated_at", null: false
+    t.index ["slug"], name: "index_content_types_on_slug", unique: true
+    t.index ["team_id"], name: "index_content_types_on_team_id"
+  end
+
+  create_table "field_definitions", force: :cascade do |t|
+    t.string "api_key", null: false
+    t.integer "content_type_id", null: false
+    t.datetime "created_at", null: false
+    t.string "field_type", null: false
+    t.string "name", null: false
+    t.integer "position", default: 0, null: false
+    t.boolean "required", default: false, null: false
+    t.datetime "updated_at", null: false
+    t.json "validations"
+    t.index ["content_type_id", "api_key"], name: "index_field_definitions_on_content_type_id_and_api_key", unique: true
+    t.index ["content_type_id"], name: "index_field_definitions_on_content_type_id"
+  end
+
   create_table "memberships", force: :cascade do |t|
     t.datetime "created_at", null: false
     t.string "role", default: "member", null: false
@@ -60,6 +85,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_03_26_102630) do
     t.index ["email_address"], name: "index_users_on_email_address", unique: true
   end
 
+  add_foreign_key "content_types", "teams"
+  add_foreign_key "field_definitions", "content_types"
   add_foreign_key "memberships", "teams"
   add_foreign_key "memberships", "users"
   add_foreign_key "nodes", "teams"
