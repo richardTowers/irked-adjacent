@@ -127,12 +127,33 @@ RSpec.describe Team, type: :model do
       expect(team.users).to include(user)
     end
 
+    it "has many nodes" do
+      team = Team.create!(name: "Test Team")
+      Node.create!(title: "Node 1", team: team)
+      Node.create!(title: "Node 2", team: team)
+      expect(team.nodes.count).to eq(2)
+    end
+
     it "destroys memberships when destroyed" do
       team = Team.create!(name: "Test Team")
       user = User.create!(email_address: "test@example.com", password: "securepassword1", password_confirmation: "securepassword1")
       team.memberships.create!(user: user)
 
       expect { team.destroy }.to change(Membership, :count).by(-1)
+    end
+
+    it "prevents destruction when team has nodes" do
+      team = Team.create!(name: "Test Team")
+      Node.create!(title: "A Node", team: team)
+
+      expect(team.destroy).to be_falsey
+      expect(team.errors[:base]).to include("Cannot delete record because dependent nodes exist")
+      expect(Team.exists?(team.id)).to be true
+    end
+
+    it "can be destroyed when it has no nodes" do
+      team = Team.create!(name: "Test Team")
+      expect { team.destroy! }.to change(Team, :count).by(-1)
     end
   end
 

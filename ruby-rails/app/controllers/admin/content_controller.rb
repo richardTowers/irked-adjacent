@@ -45,7 +45,7 @@ module Admin
     private
 
     def node_params
-      params.require(:node).permit(:title, :slug, :body, :published)
+      params.require(:node).permit(:title, :slug, :body, :published, :team_id)
     end
   end
 end

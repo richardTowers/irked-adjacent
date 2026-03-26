@@ -3,6 +3,8 @@ require "rails_helper"
 RSpec.describe "Admin::Content", type: :request do
   before { create_and_sign_in_user }
 
+  let(:team) { Team.create!(name: "Test Team") }
+
   describe "GET /admin/content" do
     context "when there are no nodes" do
       it "returns 200 and shows the empty state" do
@@ -15,11 +17,11 @@ RSpec.describe "Admin::Content", type: :request do
 
     context "when nodes exist" do
       let!(:older_node) do
-        Node.create!(title: "Older Post", body: "Older body", published: true)
+        Node.create!(title: "Older Post", body: "Older body", published: true, team: team)
       end
 
       let!(:newer_node) do
-        Node.create!(title: "Newer Post", body: "Newer body", published: false)
+        Node.create!(title: "Newer Post", body: "Newer body", published: false, team: team)
       end
 
       it "returns 200 and displays a table" do
@@ -74,7 +76,8 @@ RSpec.describe "Admin::Content", type: :request do
       Node.create!(
         title: "Test Node",
         body: "Some <strong>bold</strong> content",
-        published: true
+        published: true,
+        team: team
       )
     end
 
@@ -167,7 +170,7 @@ RSpec.describe "Admin::Content", type: :request do
     context "with valid params" do
       it "creates a node and redirects to the show page" do
         expect {
-          post "/admin/content", params: { node: { title: "My First Post", body: "Hello world" } }
+          post "/admin/content", params: { node: { title: "My First Post", body: "Hello world", team_id: team.id } }
         }.to change(Node, :count).by(1)
 
         node = Node.last
@@ -175,7 +178,7 @@ RSpec.describe "Admin::Content", type: :request do
       end
 
       it "shows a success flash message after redirect" do
-        post "/admin/content", params: { node: { title: "My First Post" } }
+        post "/admin/content", params: { node: { title: "My First Post", team_id: team.id } }
 
         follow_redirect!
 
@@ -183,7 +186,7 @@ RSpec.describe "Admin::Content", type: :request do
       end
 
       it "has the flash message in an element with role='status'" do
-        post "/admin/content", params: { node: { title: "Flash Test" } }
+        post "/admin/content", params: { node: { title: "Flash Test", team_id: team.id } }
 
         follow_redirect!
 
@@ -194,7 +197,7 @@ RSpec.describe "Admin::Content", type: :request do
 
     context "with blank title" do
       it "returns 422 and re-renders the form with errors" do
-        post "/admin/content", params: { node: { title: "", body: "Some body" } }
+        post "/admin/content", params: { node: { title: "", body: "Some body", team_id: team.id } }
 
         expect(response).to have_http_status(:unprocessable_entity)
         expect(response.body).to include("New Node")
@@ -202,14 +205,14 @@ RSpec.describe "Admin::Content", type: :request do
       end
 
       it "preserves previously entered values" do
-        post "/admin/content", params: { node: { title: "", body: "Keep this body" } }
+        post "/admin/content", params: { node: { title: "", body: "Keep this body", team_id: team.id } }
 
         expect(response).to have_http_status(:unprocessable_entity)
         expect(response.body).to include("Keep this body")
       end
 
       it "marks the title field as aria-invalid" do
-        post "/admin/content", params: { node: { title: "" } }
+        post "/admin/content", params: { node: { title: "", team_id: team.id } }
 
         expect(response.body).to include('aria-invalid="true"')
         expect(response.body).to include("title-error")
@@ -218,23 +221,23 @@ RSpec.describe "Admin::Content", type: :request do
 
     context "slug handling" do
       it "auto-generates a slug from the title when slug is blank" do
-        post "/admin/content", params: { node: { title: "My Great Post" } }
+        post "/admin/content", params: { node: { title: "My Great Post", team_id: team.id } }
 
         node = Node.last
         expect(node.slug).to eq("my-great-post")
       end
 
       it "uses the provided slug when one is given" do
-        post "/admin/content", params: { node: { title: "My Great Post", slug: "custom-slug" } }
+        post "/admin/content", params: { node: { title: "My Great Post", slug: "custom-slug", team_id: team.id } }
 
         node = Node.last
         expect(node.slug).to eq("custom-slug")
       end
 
       it "returns 422 with error when slug is a duplicate" do
-        Node.create!(title: "Existing", slug: "taken-slug")
+        Node.create!(title: "Existing", slug: "taken-slug", team: team)
 
-        post "/admin/content", params: { node: { title: "New Post", slug: "taken-slug" } }
+        post "/admin/content", params: { node: { title: "New Post", slug: "taken-slug", team_id: team.id } }
 
         expect(response).to have_http_status(:unprocessable_entity)
         expect(response.body).to include("slug-error")
@@ -243,7 +246,7 @@ RSpec.describe "Admin::Content", type: :request do
 
     context "published flag" do
       it "sets published to true and records published_at when checked" do
-        post "/admin/content", params: { node: { title: "Published Post", published: "1" } }
+        post "/admin/content", params: { node: { title: "Published Post", published: "1", team_id: team.id } }
 
         node = Node.last
         expect(node.published).to be true
@@ -251,7 +254,7 @@ RSpec.describe "Admin::Content", type: :request do
       end
 
       it "defaults to draft when published is not checked" do
-        post "/admin/content", params: { node: { title: "Draft Post" } }
+        post "/admin/content", params: { node: { title: "Draft Post", team_id: team.id } }
 
         node = Node.last
         expect(node.published).to be false
@@ -261,7 +264,7 @@ RSpec.describe "Admin::Content", type: :request do
 
     context "strong parameters" do
       it "ignores unpermitted parameters" do
-        post "/admin/content", params: { node: { title: "Safe Post", created_at: "2000-01-01" } }
+        post "/admin/content", params: { node: { title: "Safe Post", created_at: "2000-01-01", team_id: team.id } }
 
         node = Node.last
         expect(node.title).to eq("Safe Post")
@@ -272,7 +275,7 @@ RSpec.describe "Admin::Content", type: :request do
 
   describe "GET /admin/content/:id/edit" do
     let!(:node) do
-      Node.create!(title: "Editable Node", slug: "editable-node", body: "Original body", published: false)
+      Node.create!(title: "Editable Node", slug: "editable-node", body: "Original body", published: false, team: team)
     end
 
     it "returns 200 and displays the edit form" do
@@ -321,7 +324,7 @@ RSpec.describe "Admin::Content", type: :request do
 
   describe "PATCH /admin/content/:id" do
     let!(:node) do
-      Node.create!(title: "Original Title", slug: "original-title", body: "Original body", published: false)
+      Node.create!(title: "Original Title", slug: "original-title", body: "Original body", published: false, team: team)
     end
 
     context "with valid params" do
@@ -376,7 +379,7 @@ RSpec.describe "Admin::Content", type: :request do
 
     context "slug handling" do
       it "returns 422 with error when slug duplicates another node" do
-        Node.create!(title: "Other Node", slug: "taken-slug")
+        Node.create!(title: "Other Node", slug: "taken-slug", team: team)
 
         patch "/admin/content/#{node.id}", params: { node: { slug: "taken-slug" } }
 
@@ -425,7 +428,7 @@ RSpec.describe "Admin::Content", type: :request do
 
   describe "DELETE /admin/content/:id" do
     let!(:node) do
-      Node.create!(title: "Doomed Node", slug: "doomed-node", body: "Goodbye")
+      Node.create!(title: "Doomed Node", slug: "doomed-node", body: "Goodbye", team: team)
     end
 
     it "deletes the node and redirects to the listing page" do
@@ -475,7 +478,7 @@ RSpec.describe "Admin::Content", type: :request do
   end
 
   describe "show page delete button" do
-    let!(:node) { Node.create!(title: "Test Node") }
+    let!(:node) { Node.create!(title: "Test Node", team: team) }
 
     it "has a delete button rendered as a form with DELETE method" do
       get "/admin/content/#{node.id}"
